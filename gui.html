@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estúdio Lisa</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --paper: #F2F4F8; --surface: #FFFFFF; --sunk: #E9EDF4;
+  --ink: #1C2438; --muted: #5B6580; --line: #D5DBE8; --rail: #B9C8E6;
+  --blue: #3F6FD8; --blue-soft: #DCE6FA;
+  --teal: #0B7A7A; --teal-soft: #D6EFEF;
+  --red: #C62F2F; --red-soft: #FADADA;
+  --amber: #9A5B00; --amber-soft: #F8E8C8;
+  --ui: "Bahnschrift", "Avenir Next", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --code: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #171E33; --surface: #1F2842; --sunk: #131A2D;
+    --ink: #E6EAF5; --muted: #A3AECB; --line: #34405F; --rail: #4A5D8C;
+    --blue: #8CAEFA; --blue-soft: #2A3A66;
+    --teal: #55C7C7; --teal-soft: #1B4348;
+    --red: #FF8A8A; --red-soft: #4A2530;
+    --amber: #E8B85A; --amber-soft: #4A3A18;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3, p { margin: 0; }
+code, .code { font-family: var(--code); font-size: 13px; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+#app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+#topbar { display: flex; align-items: center; gap: 24px; padding: 0 20px; min-height: 52px; background: var(--surface); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: .01em; }
+.tabs { display: flex; align-self: stretch; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 0 16px; cursor: pointer; color: var(--muted); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--blue); font-weight: 600; }
+#file-status { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.st { font-size: 13px; color: var(--muted); }
+.st.dirty { color: var(--amber); font-weight: 600; }
+.pill { font-size: 12.5px; padding: 1px 8px; border-radius: 99px; font-weight: 600; }
+.pill.err { background: var(--red-soft); color: var(--red); }
+.pill.warn { background: var(--amber-soft); color: var(--amber); }
+
+.view { display: grid; grid-template-columns: 290px minmax(0, 1fr); min-height: 0; }
+.side { border-right: 1px solid var(--line); background: var(--surface); overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.side-h { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+.pane { overflow: auto; padding: 24px clamp(16px, 4vw, 48px) 80px; }
+.pane-inner { max-width: 880px; margin: 0 auto; }
+
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 6px 12px; cursor: pointer; }
+.btn:hover:not(:disabled) { background: var(--sunk); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--blue); }
+.btn.danger { background: var(--red); border-color: var(--red); color: #fff; }
+.btn.block { width: 100%; }
+.ib { display: inline-grid; place-items: center; width: 28px; height: 28px; background: none; border: 0; border-radius: 5px; cursor: pointer; color: var(--muted); }
+.ib:hover { background: var(--sunk); color: var(--ink); }
+.ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+input[type=text], input[type=search], input[type=number], textarea, select {
+  width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 6px 9px;
+}
+textarea { resize: vertical; min-height: 2.6em; field-sizing: content; line-height: 1.45; }
+textarea.code { min-height: 5em; }
+.bad { border-color: var(--red) !important; }
+.err-text { color: var(--red); font-size: 13px; margin-top: 4px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+
+.file, .conv { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; border-radius: 5px; padding: 6px 8px; cursor: pointer; }
+.file:hover, .conv:hover { background: var(--sunk); }
+.file[aria-current="true"], .conv[aria-current="true"] { background: var(--blue-soft); }
+.file .fn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file .fc { font-size: 12.5px; color: var(--muted); }
+.conv .ci { min-width: 22px; font-size: 12.5px; color: var(--muted); }
+.conv .ct { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv .nt { font-size: 12px; color: var(--muted); }
+.flag { display: inline-grid; place-items: center; }
+.flag.err { color: var(--red); } .flag.warn { color: var(--amber); }
+#new-file { display: flex; gap: 6px; }
+#conv-list { display: flex; flex-direction: column; gap: 1px; }
+
+.ed-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.ed-head h2 { font-size: 22px; font-weight: 700; }
+.ed-head h2 small { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+.ed-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.issues { margin-bottom: 8px; }
+.issues summary { cursor: pointer; font-size: 13.5px; padding: 6px 0; }
+.issues.has-err summary { color: var(--red); font-weight: 600; }
+.issues.has-warn summary { color: var(--amber); font-weight: 600; }
+.issues ul { margin: 0 0 8px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.issues li button { display: flex; gap: 8px; align-items: baseline; background: none; border: 0; padding: 3px 6px; text-align: left; cursor: pointer; border-radius: 4px; width: 100%; font-size: 13.5px; }
+.issues li button:hover { background: var(--sunk); }
+.issues .lv-err { color: var(--red); } .issues .lv-warn { color: var(--amber); }
+
+.turn { margin: 30px 0 0; padding-top: 14px; border-top: 2px solid var(--blue); font-size: 17px; font-weight: 700; }
+.msg { padding: 14px 0 16px; border-top: 1px solid var(--line); scroll-margin-top: 16px; }
+.turn + .msg { border-top: 0; }
+.msg-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.msg-h h3 { font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.msg-tools { display: flex; opacity: .55; }
+.msg:hover .msg-tools, .msg:focus-within .msg-tools { opacity: 1; }
+.msg-user { border-left: 3px solid var(--blue); padding-left: 14px; }
+.msg-answer { border-left: 3px solid var(--teal); padding-left: 14px; }
+.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { from { background: var(--blue-soft); } to { background: transparent; } }
+
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field > span { font-size: 13px; color: var(--muted); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lvls { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 20px; margin-top: 4px; }
+.lvl { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.lvl span { font-size: 13px; color: var(--muted); }
+.lvl input { grid-column: 1 / -1; width: 100%; accent-color: var(--blue); }
+.lvl b { font-variant-numeric: tabular-nums; }
+
+details.fold { margin: 2px 0 4px; }
+details.fold > summary { cursor: pointer; font-size: 13.5px; color: var(--muted); padding: 4px 0; }
+.cat-grid { display: grid; grid-template-columns: 1.5fr 2.4fr 0.9fr 0.8fr 1.4fr 28px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.cat-head { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+.cat-grid input { padding: 4px 7px; font-size: 13.5px; }
+.cat-grid input.code { font-size: 12.5px; }
+
+/* A linha do tempo: trilho com marcadores, como numa folha de exposição de animação */
+.tl { position: relative; padding-left: 30px; margin: 4px 0; }
+.tl::before { content: ""; position: absolute; left: 12px; top: 8px; bottom: 8px; width: 2px; background: var(--rail); border-radius: 1px; }
+.ev { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 5px 0; }
+.ev .mark { position: absolute; left: -22px; top: 12px; width: 11px; height: 11px; }
+.ev-speech .mark { border-radius: 50%; background: var(--surface); border: 2px solid var(--blue); width: 11px; height: 11px; }
+.ev-action .mark { background: var(--teal); transform: rotate(45deg) scale(.9); border-radius: 2px; }
+.ev-other .mark { background: var(--amber); border-radius: 2px; }
+.ev-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 28px; }
+.anim { color: var(--teal); font-weight: 600; }
+.say { white-space: pre-wrap; padding: 2px 0; }
+.ev-tools { display: flex; opacity: .5; }
+.ev:hover .ev-tools, .ev:focus-within .ev-tools { opacity: 1; }
+.ev-fields { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; align-items: start; }
+.ev-fields .kind { padding: 5px 6px; }
+.ev-act { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ev-act select { width: auto; min-width: 190px; font-family: var(--code); font-size: 13px; }
+.ev-act input[type=range] { width: 140px; accent-color: var(--teal); }
+.ev-act b { font-variant-numeric: tabular-nums; min-width: 2.6em; }
+.tl-add { display: flex; gap: 6px; margin-top: 6px; padding-left: 0; }
+.bar { display: inline-block; width: 64px; height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; vertical-align: middle; }
+.bar i { display: block; height: 100%; background: var(--teal); }
+.wv { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.wv b { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.reveal .ev { animation: cue .45s ease-out both; animation-delay: calc(var(--i) * 110ms); }
+@keyframes cue { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+
+.mood { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-bottom: 4px; }
+.emo { font-weight: 700; color: var(--ink); }
+.lv { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.lv .bar { width: 44px; } .lv .bar i { background: var(--blue); }
+.lv b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.add-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.add-bar select { width: auto; }
+.empty { padding: 60px 0; text-align: center; color: var(--muted); }
+.empty h2 { color: var(--ink); font-size: 18px; margin-bottom: 6px; }
+
+/* conversa */
+#chat-view .pane { display: flex; flex-direction: column; padding-bottom: 0; }
+#transcript { flex: 1; min-height: 0; width: 100%; }
+.say-user { border-left: 3px solid var(--blue); padding: 2px 0 2px 14px; margin: 22px 0 10px; white-space: pre-wrap; }
+.who { font-size: 13px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 2px; }
+.reply { border-left: 3px solid var(--teal); padding: 2px 0 6px 14px; }
+.reply-tools { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
+.note { font-size: 13px; color: var(--amber); margin-top: 4px; }
+.raw { margin-top: 4px; }
+.raw pre { margin: 6px 0 0; padding: 10px; background: var(--sunk); border-radius: 5px; overflow: auto; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.45 var(--code); }
+#composer { position: sticky; bottom: 0; width: min(100%, 880px); margin: 0 auto; background: var(--paper); padding: 12px 0 20px; display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--line); }
+#composer textarea { min-height: 3em; max-height: 220px; }
+.model-line { display: flex; gap: 8px; align-items: center; font-size: 13.5px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ready { background: var(--teal); } .dot.loading { background: var(--amber); } .dot.error { background: var(--red); }
+.banner { background: var(--amber-soft); color: var(--amber); padding: 6px 10px; border-radius: 5px; font-size: 13px; }
+
+dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 20px; max-width: 440px; }
+dialog::backdrop { background: rgba(20, 28, 50, .5); }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+#toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 8px 16px; border-radius: 6px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 80vw; }
+#toast.show { opacity: 1; } #toast.err { background: var(--red); color: #fff; }
+
+#side-toggle { display: none; }
+@media (max-width: 860px) {
+  #side-toggle { display: inline-block; }
+  .view { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); }
+  .side { display: none; }
+  body.side-open .view { grid-template-rows: auto minmax(0, 1fr); }
+  body.side-open .view:not([hidden]) .side { display: flex; border-right: 0; border-bottom: 1px solid var(--line); max-height: 55vh; }
+  .cat-grid { grid-template-columns: 1fr 1fr; }
+  .cat-head { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <span class="brand">Estúdio Lisa</span>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-mode="datasets" aria-selected="true">Datasets</button>
+      <button class="tab" role="tab" data-mode="chat" aria-selected="false">Conversar</button>
+    </nav>
+    <button id="side-toggle" class="btn" type="button" aria-controls="sidebar chat-side"></button>
+    <div id="file-status">
+      <span id="status"></span>
+      <button id="save" class="btn primary" disabled>Salvar</button>
+    </div>
+  </header>
+
+  <div id="datasets-view" class="view">
+    <aside id="sidebar" class="side" aria-label="Arquivos e conversas"></aside>
+    <main id="editor" class="pane"></main>
+  </div>
+
+  <div id="chat-view" class="view" hidden>
+    <aside id="chat-side" class="side" aria-label="Configurações da conversa"></aside>
+    <main class="pane">
+      <div id="transcript" class="pane-inner"></div>
+      <div id="composer"></div>
+    </main>
+  </div>
+</div>
+
+<datalist id="dl-cat"><option value="idle"><option value="gesture"><option value="facial"></datalist>
+<datalist id="dl-layer"><option value="body"><option value="face"></datalist>
+<datalist id="dl-emo"></datalist>
+<dialog id="dlg"></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+const TOKEN = "__GUI_TOKEN__";
+const $ = (sel, el = document) => el.querySelector(sel);
+const clone = v => JSON.parse(JSON.stringify(v));
+const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
+
+/* ---------------------------------------------------------------- DOM */
+function append(el, kids) {
+  for (const k of kids) {
+    if (k === null || k === undefined || k === false) continue;
+    if (Array.isArray(k)) append(el, k);
+    else el.append(k.nodeType ? k : document.createTextNode(String(k)));
+  }
+}
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  let value;
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'value') value = v;
+    else if (['checked', 'disabled', 'hidden', 'selected', 'autofocus'].includes(k)) el[k] = !!v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  append(el, kids);
+  if (value !== undefined) el.value = value;
+  return el;
+}
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const ICONS = {
+  up: 'M6 15l6-6 6 6', down: 'M6 9l6 6 6-6', x: 'M6 6l12 12M18 6L6 18',
+  plus: 'M12 5v14M5 12h14', warn: 'M12 4l9 16H3zM12 10v4M12 17v.5',
+  send: 'M4 12l16-8-6 16-3-7z', copy: 'M9 9h10v10H9zM5 15V5h10',
+};
+function icon(name) {
+  const s = document.createElementNS(SVG_NS, 'svg');
+  s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(SVG_NS, 'path'); p.setAttribute('d', ICONS[name]); s.append(p);
+  return s;
+}
+const iconBtn = (name, label, onclick) =>
+  h('button', { class: 'ib', type: 'button', title: label, 'aria-label': label, onclick }, icon(name));
+const btn = (label, onclick, cls = '') => h('button', { class: 'btn ' + cls, type: 'button', onclick }, label);
+
+let toastTimer;
+function toast(text, kind = '') {
+  const t = $('#toast');
+  t.textContent = text; t.className = 'show ' + kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, kind === 'err' ? 6000 : 2600);
+}
+function askConfirm(message, { ok = 'Confirmar', cancel = 'Cancelar', danger = false } = {}) {
+  return new Promise(resolve => {
+    const d = $('#dlg');
+    d.replaceChildren(h('form', { method: 'dialog' },
+      h('p', null, message),
+      h('div', { class: 'dlg-actions' },
+        h('button', { class: 'btn', value: 'cancel' }, cancel),
+        h('button', { class: 'btn primary' + (danger ? ' danger' : ''), value: 'ok', autofocus: true }, ok))));
+    d.returnValue = '';
+    d.onclose = () => resolve(d.returnValue === 'ok');
+    d.showModal();
+  });
+}
+async function api(method, url, body) {
+  const opt = { method, headers: { 'X-GUI-Token': TOKEN } };
+  if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  let r;
+  try { r = await fetch(url, opt); }
+  catch { throw new Error('Sem conexão com o servidor. O gui.py ainda está rodando?'); }
+  let j = null;
+  try { j = await r.json(); } catch { /* sem corpo */ }
+  if (!r.ok) { const e = new Error((j && j.error) || `Erro ${r.status}`); e.status = r.status; throw e; }
+  return j;
+}
+
+/* ------------------------------------------------------------- estado */
+const S = {
+  mode: 'datasets',
+  files: [], cur: null, sel: -1, filter: '',
+  convIssues: [],
+  defaults: { catalog: [], emotions: [], agent_id: 'Lisa' },
+  ui: { open: new Set() },
+  model: { state: 'idle', error: null, mock: false, model: '', adapter: '' },
+  chat: { catalog: null, memoryOn: false, memory: null, turns: [], maxTokens: 256, busy: false },
+};
+const drafts = new Map(); // objeto -> {chave: {text, error}}  (JSON ainda inválido)
+
+const ROLE_LABEL = { system: 'Sistema', memory: 'Memória', user: 'Usuário', mood: 'Humor', answer: 'Resposta' };
+const LEVELS = [['shyness_level', 'Timidez'], ['comfort_level', 'Conforto'], ['distraction_level', 'Distração'], ['energy_level', 'Energia']];
+
+// A ordem das chaves é a que o modelo viu no treino; nunca reordene.
+const mk = {
+  system: catalog => ({ role: 'system', animation_catalog: clone(catalog) }),
+  memory: () => ({ role: 'memory', summary: '', key_facts: {} }),
+  user: (text = '') => ({ role: 'user', text }),
+  mood: () => ({ role: 'mood', primary_emotion: '', shyness_level: 5, comfort_level: 5, distraction_level: 3, energy_level: 5 }),
+  answer: () => ({ role: 'answer', agent_id: S.defaults.agent_id || 'Lisa', timeline: [mk.speech()] }),
+  speech: (text = '') => ({ event_role: 'speech', text }),
+  action: (id = '', w = 0.8) => ({ event_role: 'action', animation_id: id, blend_weight: w }),
+  anim: () => ({ id: '', description: '', category: 'idle', layer: 'body', tags: [] }),
+};
+
+function forgetDrafts(v) {
+  if (v && typeof v === 'object') {
+    drafts.delete(v);
+    for (const x of Array.isArray(v) ? v : Object.values(v)) forgetDrafts(x);
+  }
+}
+function invalidDrafts() {
+  let n = 0;
+  for (const store of drafts.values()) for (const d of Object.values(store)) if (d.error) n++;
+  return n;
+}
+const catalogOf = conv => {
+  const sys = conv.find(m => m && m.role === 'system');
+  return sys && Array.isArray(sys.animation_catalog) ? sys.animation_catalog : [];
+};
+const catalogIds = conv => catalogOf(conv).map(a => a && a.id).filter(x => typeof x === 'string' && x !== '');
+const firstUser = conv => (conv.find(m => m && m.role === 'user' && typeof m.text === 'string') || {}).text || '';
+const searchText = conv => conv.map(m => [m.text, m.summary, ...(Array.isArray(m.timeline) ? m.timeline.map(e => e && e.text) : [])].filter(Boolean).join(' ')).join(' ').toLowerCase();
+
+/* ---------------------------------------------------------- validação */
+function validateConv(conv) {
+  const out = [];
+  const add = (level, text, mi) => out.push({ level, text, mi });
+  const ids = new Set(catalogIds(conv));
+  const systems = conv.filter(m => m.role === 'system');
+  if (!systems.length) add('warn', 'Falta a mensagem system com o animation_catalog.');
+  if (systems.length > 1) add('warn', 'Há mais de uma mensagem system.');
+  if (systems.length && conv[0].role !== 'system') add('warn', 'A mensagem system deveria ser a primeira.');
+
+  let turn = 0, hasMood = false, hasAnswer = true, lastUserIdx = -1;
+  const closeTurn = () => { if (turn && !hasAnswer) add('warn', `Turno ${turn}: sem resposta.`, lastUserIdx); };
+  conv.forEach((m, i) => {
+    switch (m.role) {
+      case 'system': {
+        const seen = new Set();
+        (Array.isArray(m.animation_catalog) ? m.animation_catalog : []).forEach(a => {
+          if (!a || typeof a.id !== 'string' || !a.id.trim()) add('error', 'Há uma animação sem id no catálogo.', i);
+          else if (seen.has(a.id)) add('warn', `Id repetido no catálogo: ${a.id}.`, i);
+          else seen.add(a.id);
+        });
+        if (!Array.isArray(m.animation_catalog) || !m.animation_catalog.length) add('warn', 'Catálogo de animações vazio.', i);
+        break;
+      }
+      case 'memory':
+        if (turn > 0) add('warn', 'A memória deveria vir antes do primeiro turno.', i);
+        if (typeof m.summary !== 'string' || !m.summary.trim()) add('warn', 'Memória sem summary.', i);
+        break;
+      case 'user':
+        closeTurn(); turn++; hasMood = false; hasAnswer = false; lastUserIdx = i;
+        if (typeof m.text !== 'string' || !m.text.trim()) add('warn', `Turno ${turn}: mensagem do usuário vazia.`, i);
+        break;
+      case 'mood':
+        hasMood = true;
+        if (typeof m.primary_emotion !== 'string' || !m.primary_emotion.trim()) add('warn', `Turno ${turn}: primary_emotion vazio.`, i);
+        for (const [k] of LEVELS) {
+          if (!Number.isInteger(m[k]) || m[k] < 0 || m[k] > 10) add('warn', `Turno ${turn}: ${k} deveria ser um inteiro de 0 a 10.`, i);
+        }
+        break;
+      case 'answer': {
+        hasAnswer = true;
+        if (!turn) add('warn', 'Resposta antes de qualquer mensagem do usuário.', i);
+        else if (!hasMood) add('warn', `Turno ${turn}: resposta sem 'mood' antes dela.`, i);
+        if (typeof m.agent_id !== 'string' || !m.agent_id.trim()) add('warn', `Turno ${turn}: agent_id vazio.`, i);
+        if (!Array.isArray(m.timeline) || !m.timeline.length) { add('warn', `Turno ${turn}: timeline vazia.`, i); break; }
+        m.timeline.forEach((ev, k) => {
+          const where = `Turno ${turn}, evento ${k + 1}`;
+          if (!ev || typeof ev !== 'object') return add('error', `${where}: não é um objeto.`, i);
+          if (ev.event_role === 'action') {
+            if (!ids.has(ev.animation_id)) add('error', `${where}: animação "${ev.animation_id ?? ''}" não está no catálogo.`, i);
+            if (typeof ev.blend_weight !== 'number' || ev.blend_weight < 0 || ev.blend_weight > 1) add('error', `${where}: blend_weight precisa ser um número de 0 a 1.`, i);
+          } else if (ev.event_role === 'speech') {
+            if (typeof ev.text !== 'string' || !ev.text.trim()) add('warn', `${where}: fala vazia.`, i);
+          } else add('warn', `${where}: event_role desconhecido (${JSON.stringify(ev.event_role)}).`, i);
+        });
+        break;
+      }
+      default:
+        add('warn', `Papel desconhecido: ${JSON.stringify(m.role)}.`, i);
+    }
+  });
+  closeTurn();
+  if (!turn) add('warn', 'Nenhuma mensagem do usuário.');
+  return out;
+}
+function recomputeIssues() {
+  S.convIssues = S.cur ? S.cur.data.map(validateConv) : [];
+}
+function fileCounts() {
+  let errors = invalidDrafts(), warns = 0;
+  for (const list of S.convIssues) for (const x of list) { if (x.level === 'error') errors++; else warns++; }
+  return { errors, warns };
+}
+
+/* ------------------------------------------------------ barra superior */
+function renderStatus() {
+  const c = S.cur;
+  const el = $('#status');
+  if (!c) { el.replaceChildren(); $('#save').disabled = true; return; }
+  const { errors, warns } = fileCounts();
+  el.replaceChildren(h('span', { class: 'row' },
+    h('span', { class: 'st ' + (c.dirty ? 'dirty' : '') }, c.saving ? 'Salvando…' : c.dirty ? 'Alterações não salvas' : 'Salvo'),
+    errors ? h('span', { class: 'pill err' }, `${errors} ${errors === 1 ? 'erro' : 'erros'}`) : null,
+    warns ? h('span', { class: 'pill warn' }, `${warns} ${warns === 1 ? 'aviso' : 'avisos'}`) : null));
+  $('#save').disabled = !c.dirty || c.saving || invalidDrafts() > 0;
+}
+let issuesTimer;
+function touch() {
+  if (!S.cur) return;
+  S.cur.dirty = true;
+  renderStatus();
+  clearTimeout(issuesTimer);
+  issuesTimer = setTimeout(refreshDerived, 220);
+}
+function refreshDerived() {
+  recomputeIssues(); renderStatus(); renderConvList(); renderIssues();
+}
+function setMode(mode) {
+  S.mode = mode;
+  $('#datasets-view').hidden = mode !== 'datasets';
+  $('#chat-view').hidden = mode !== 'chat';
+  $('#file-status').hidden = mode !== 'datasets';
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.mode === mode)));
+  $('#side-toggle').textContent = mode === 'chat' ? 'Modelo e contexto' : 'Arquivos e conversas';
+  document.body.classList.remove('side-open');
+  if (mode === 'chat') enterChat();
+}
+
+/* ------------------------------------------------------ arquivos/lista */
+function buildSidebar() {
+  $('#sidebar').replaceChildren(
+    h('h2', { class: 'side-h' }, 'Arquivos'),
+    h('div', { id: 'file-list' }),
+    h('form', { id: 'new-file', onsubmit: e => { e.preventDefault(); newFile($('#new-file-name').value.trim()); } },
+      h('input', { id: 'new-file-name', type: 'text', placeholder: 'novo-arquivo', 'aria-label': 'Nome do novo arquivo', maxlength: 64 }),
+      h('button', { class: 'btn', type: 'submit' }, 'Criar')),
+    h('h2', { class: 'side-h' }, 'Conversas'),
+    h('input', { id: 'filter', type: 'search', placeholder: 'Filtrar por texto', 'aria-label': 'Filtrar conversas', oninput: e => { S.filter = e.target.value; renderConvList(); } }),
+    h('div', { id: 'conv-list' }),
+    h('button', { class: 'btn block', type: 'button', id: 'new-conv', onclick: newConversation }, 'Nova conversa'));
+}
+async function refreshFiles() {
+  try { S.files = (await api('GET', '/api/datasets')).datasets; }
+  catch (e) { toast(e.message, 'err'); }
+  if (S.cur && S.cur.isNew && !S.files.some(f => f.name === S.cur.name)) S.files.push({ name: S.cur.name, conversations: S.cur.data.length, isNew: true });
+  renderFiles();
+}
+function renderFiles() {
+  const list = $('#file-list');
+  list.replaceChildren(...(S.files.length ? S.files.map(f => h('button', {
+    class: 'file', type: 'button', 'aria-current': S.cur && S.cur.name === f.name ? 'true' : null,
+    onclick: () => openFile(f.name),
+  }, h('span', { class: 'fn' }, f.name + '.json'),
+     h('span', { class: 'fc' }, f.error ? 'erro' : String(S.cur && S.cur.name === f.name ? S.cur.data.length : f.conversations ?? '')),
+     f.error ? h('span', { class: 'flag err', title: f.error }, icon('warn')) : null))
+    : [h('p', { class: 'muted small' }, 'Nenhum arquivo em datasets/.')]));
+}
+async function openFile(name) {
+  if (S.cur && S.cur.name === name) return;
+  if (S.cur && S.cur.dirty && !await askConfirm(`Descartar as alterações não salvas em ${S.cur.name}.json?`, { ok: 'Descartar', danger: true })) return;
+  try {
+    const j = await api('GET', `/api/datasets/${encodeURIComponent(name)}`);
+    if (!Array.isArray(j.data)) throw new Error('A raiz do JSON não é uma lista.');
+    drafts.clear();
+    S.cur = { name, hash: j.hash, trailing: j.trailing_newline, data: j.data, dirty: false };
+    S.sel = j.data.length ? 0 : -1; S.filter = ''; $('#filter').value = '';
+    renderAll();
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function newFile(name) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(name)) { toast('Nome inválido: use letras, números, - e _.', 'err'); return; }
+  if (S.files.some(f => f.name === name)) { toast(`${name}.json já existe.`, 'err'); return; }
+  if (S.cur && S.cur.dirty && !await askConfirm(`Descartar as alterações não salvas em ${S.cur.name}.json?`, { ok: 'Descartar', danger: true })) return;
+  S.files = S.files.filter(f => !f.isNew);
+  drafts.clear();
+  S.cur = { name, hash: null, trailing: true, data: [], dirty: true, isNew: true };
+  S.files.push({ name, conversations: 0, isNew: true });
+  S.sel = -1; $('#new-file-name').value = '';
+  renderAll();
+}
+async function saveFile(overwrite = false) {
+  const c = S.cur;
+  if (!c || c.saving) return;
+  if (invalidDrafts()) { toast('Corrija os campos JSON inválidos antes de salvar.', 'err'); return; }
+  c.saving = true; renderStatus();
+  try {
+    const r = await api('PUT', `/api/datasets/${encodeURIComponent(c.name)}`, { data: c.data, base_hash: c.hash, trailing_newline: c.trailing });
+    c.hash = r.hash; c.dirty = false; c.isNew = false;
+    toast('Salvo.');
+    c.saving = false;
+    await refreshFiles();
+  } catch (e) {
+    c.saving = false;
+    if (e.status === 409 && !overwrite && c.hash !== null) {
+      const go = await askConfirm(`${e.message} Sobrescrever com a sua versão?`, { ok: 'Sobrescrever', danger: true });
+      if (go) {
+        try {
+          c.hash = (await api('GET', `/api/datasets/${encodeURIComponent(c.name)}`)).hash;
+          return saveFile(true);
+        } catch (e2) { toast(e2.message, 'err'); }
+      }
+    } else toast(e.message, 'err');
+  }
+  renderStatus();
+}
+function renderConvList() {
+  const list = $('#conv-list');
+  const c = S.cur;
+  if (!c) { list.replaceChildren(); return; }
+  const q = S.filter.trim().toLowerCase();
+  const items = [];
+  c.data.forEach((conv, i) => {
+    if (q && !searchText(conv).includes(q)) return;
+    const iss = S.convIssues[i] || [];
+    const hasErr = iss.some(x => x.level === 'error');
+    const turns = conv.filter(m => m.role === 'user').length;
+    items.push(h('button', {
+      class: 'conv', type: 'button', 'aria-current': i === S.sel ? 'true' : null,
+      onclick: () => { S.sel = i; renderConvList(); renderEditor(); },
+    }, h('span', { class: 'ci' }, String(i + 1)),
+       h('span', { class: 'ct' }, firstUser(conv) || '(sem mensagem do usuário)'),
+       turns > 1 ? h('span', { class: 'nt' }, `${turns} turnos`) : null,
+       iss.length ? h('span', { class: 'flag ' + (hasErr ? 'err' : 'warn'), title: `${iss.length} problema(s)` }, icon('warn')) : null));
+  });
+  list.replaceChildren(...(items.length ? items : [h('p', { class: 'muted small' }, q ? 'Nenhuma conversa encontrada.' : 'Nenhuma conversa ainda.')]));
+}
+function newConversation() {
+  const c = S.cur;
+  if (!c) { toast('Abra ou crie um arquivo primeiro.', 'err'); return; }
+  const catalog = c.data.length ? catalogOf(c.data[c.data.length - 1]) : S.defaults.catalog;
+  c.data.push([mk.system(catalog), mk.user(), mk.mood(), mk.answer()]);
+  S.sel = c.data.length - 1; S.filter = ''; $('#filter').value = '';
+  touch(); refreshDerived(); renderEditor();
+  requestAnimationFrame(() => { const t = $('#msgs .msg-user textarea'); if (t) t.focus(); });
+}
+function renderAll() {
+  recomputeIssues(); renderFiles(); renderConvList(); renderEditor(); renderStatus();
+}
+
+/* --------------------------------------------------------------- editor */
+function emptyState(title, text) { return h('div', { class: 'empty' }, h('h2', null, title), h('p', null, text)); }
+
+function renderEditor() {
+  document.body.classList.remove('side-open');
+  const root = $('#editor');
+  const c = S.cur;
+  if (!c) { root.replaceChildren(emptyState('Escolha um arquivo', 'Selecione um dataset na lista à esquerda ou crie um novo.')); return; }
+  const conv = c.data[S.sel];
+  if (!conv) { root.replaceChildren(emptyState('Sem conversas neste arquivo', 'Use "Nova conversa" na lista à esquerda para começar.')); return; }
+  const move = d => {
+    const j = S.sel + d;
+    if (j < 0 || j >= c.data.length) return;
+    [c.data[S.sel], c.data[j]] = [c.data[j], c.data[S.sel]];
+    S.sel = j; touch(); refreshDerived(); renderEditor();
+  };
+  root.replaceChildren(h('div', { class: 'pane-inner' },
+    h('div', { class: 'ed-head' },
+      h('h2', null, `Conversa ${S.sel + 1}`, h('small', null, `de ${c.data.length} em ${c.name}.json`)),
+      h('div', { class: 'ed-actions' },
+        iconBtn('up', 'Mover conversa para cima', () => move(-1)),
+        iconBtn('down', 'Mover conversa para baixo', () => move(1)),
+        btn('Duplicar', () => { c.data.splice(S.sel + 1, 0, clone(conv)); S.sel++; touch(); refreshDerived(); renderEditor(); }),
+        btn('Excluir', async () => {
+          if (!await askConfirm(`Excluir a conversa ${S.sel + 1}?`, { ok: 'Excluir', danger: true })) return;
+          forgetDrafts(conv); c.data.splice(S.sel, 1); S.sel = Math.min(S.sel, c.data.length - 1);
+          touch(); refreshDerived(); renderEditor();
+        }))),
+    h('div', { id: 'issues', class: 'issues' }),
+    h('div', { id: 'msgs' }, msgBlocks(conv)),
+    addBar(conv)));
+  renderIssues();
+}
+
+function renderIssues() {
+  const box = $('#issues');
+  const conv = S.cur && S.cur.data[S.sel];
+  if (!box || !conv) return;
+  const list = S.convIssues[S.sel] || [];
+  const drafted = [];
+  conv.forEach((m, i) => {
+    const check = o => { const s = drafts.get(o); if (s) for (const d of Object.values(s)) if (d.error) drafted.push({ level: 'error', text: d.error, mi: i }); };
+    check(m);
+    if (Array.isArray(m.timeline)) m.timeline.forEach(check);
+  });
+  const all = [...drafted, ...list];
+  const errs = all.filter(x => x.level === 'error').length;
+  box.className = 'issues' + (errs ? ' has-err' : all.length ? ' has-warn' : '');
+  if (!all.length) { box.replaceChildren(h('p', { class: 'muted small' }, 'Nenhum problema nesta conversa.')); return; }
+  const open = box.querySelector('details')?.open ?? errs > 0;
+  const d = h('details', null,
+    h('summary', null, errs ? `${errs} ${errs === 1 ? 'erro' : 'erros'} e ${all.length - errs} ${all.length - errs === 1 ? 'aviso' : 'avisos'}` : `${all.length} ${all.length === 1 ? 'aviso' : 'avisos'}`),
+    h('ul', null, ...all.map(x => h('li', null, h('button', { type: 'button', onclick: () => jumpTo(x.mi) },
+      h('span', { class: 'lv-' + (x.level === 'error' ? 'err' : 'warn') }, x.level === 'error' ? 'Erro' : 'Aviso'), x.text)))));
+  d.open = open;
+  box.replaceChildren(d);
+}
+function jumpTo(mi) {
+  if (mi === undefined) return;
+  const el = $(`#msgs [data-i="${mi}"]`);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center' });
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
+
+function msgBlocks(conv) {
+  const out = [];
+  let turn = 0;
+  conv.forEach((m, i) => {
+    if (m.role === 'user') { turn++; out.push(h('h3', { class: 'turn' }, `Turno ${turn}`)); }
+    out.push(msgBlock(conv, i, m));
+  });
+  return out;
+}
+function msgBlock(conv, i, m) {
+  const swap = d => {
+    const j = i + d;
+    if (j < 0 || j >= conv.length) return;
+    [conv[i], conv[j]] = [conv[j], conv[i]];
+    touch(); refreshDerived(); renderEditor();
+  };
+  const body = ({ system: systemEditor, memory: memoryEditor, user: userEditor, mood: moodEditor, answer: answerEditor }[m.role] || rawEditor)(conv, m);
+  return h('section', { class: 'msg msg-' + (ROLE_LABEL[m.role] ? m.role : 'other'), 'data-i': String(i) },
+    h('div', { class: 'msg-h' },
+      h('h3', null, ROLE_LABEL[m.role] || `Papel "${m.role}"`),
+      h('div', { class: 'msg-tools' },
+        iconBtn('up', 'Mover mensagem para cima', () => swap(-1)),
+        iconBtn('down', 'Mover mensagem para baixo', () => swap(1)),
+        iconBtn('x', 'Excluir mensagem', () => { forgetDrafts(m); conv.splice(i, 1); touch(); refreshDerived(); renderEditor(); }))),
+    body);
+}
+function addBar(conv) {
+  const hasMemory = conv.some(m => m.role === 'memory');
+  const extra = h('select', {
+    'aria-label': 'Adicionar mensagem avulsa',
+    onchange: e => {
+      const role = e.target.value; e.target.value = '';
+      if (!role) return;
+      conv.push(mk[role]()); touch(); refreshDerived(); renderEditor();
+    },
+  }, h('option', { value: '' }, 'Mensagem avulsa…'), h('option', { value: 'user' }, 'Usuário'), h('option', { value: 'mood' }, 'Humor'), h('option', { value: 'answer' }, 'Resposta'));
+  return h('div', { class: 'add-bar' },
+    btn('Adicionar turno', () => { conv.push(mk.user(), mk.mood(), mk.answer()); touch(); refreshDerived(); renderEditor(); }, 'primary'),
+    hasMemory ? null : btn('Adicionar memória', () => {
+      const at = conv.findIndex(m => m.role === 'system') + 1;
+      conv.splice(at, 0, mk.memory()); touch(); refreshDerived(); renderEditor();
+    }),
+    extra);
+}
+
+/* sistema: catálogo */
+function systemEditor(conv, m) {
+  const n = Array.isArray(m.animation_catalog) ? m.animation_catalog.length : 0;
+  const key = 'cat:' + S.sel;
+  const d = h('details', { class: 'fold', ontoggle: () => { d.open ? S.ui.open.add(key) : S.ui.open.delete(key); } },
+    h('summary', null, `Catálogo de animações (${n})`),
+    catalogEditor(m, {
+      onChange: structural => { touch(); if (structural) refreshAnimSelects(); },
+      applyAll: async () => {
+        const others = S.cur.data.length - 1;
+        if (!others) { toast('Só há uma conversa neste arquivo.'); return; }
+        if (!await askConfirm(`Substituir o catálogo das outras ${others} conversas de ${S.cur.name}.json por este?`, { ok: 'Substituir', danger: true })) return;
+        S.cur.data.forEach(cv => {
+          if (cv === conv) return;
+          const sys = cv.find(x => x.role === 'system');
+          if (sys) sys.animation_catalog = clone(m.animation_catalog); else cv.unshift(mk.system(m.animation_catalog));
+        });
+        touch(); refreshDerived(); renderEditor();
+        toast('Catálogo aplicado.');
+      },
+    }));
+  d.open = S.ui.open.has(key);
+  return d;
+}
+function catalogEditor(sys, opt) {
+  if (!Array.isArray(sys.animation_catalog)) sys.animation_catalog = [];
+  const cat = sys.animation_catalog;
+  const wrap = h('div');
+  const field = (a, key, attrs = {}) => h('input', {
+    type: 'text', value: a[key] ?? '', 'aria-label': key, ...attrs,
+    oninput: e => { a[key] = e.target.value; opt.onChange(key === 'id'); },
+  });
+  const tags = a => h('input', {
+    type: 'text', value: Array.isArray(a.tags) ? a.tags.join(', ') : '', 'aria-label': 'tags', placeholder: 'a, b, c',
+    oninput: e => { a.tags = e.target.value.split(',').map(s => s.trim()).filter(Boolean); opt.onChange(false); },
+  });
+  const draw = () => wrap.replaceChildren(
+    h('div', { class: 'cat-grid cat-head' }, h('span', null, 'id'), h('span', null, 'Descrição'), h('span', null, 'Categoria'), h('span', null, 'Camada'), h('span', null, 'Tags'), h('span')),
+    ...cat.map((a, i) => h('div', { class: 'cat-grid' },
+      field(a, 'id', { class: 'code' }), field(a, 'description'), field(a, 'category', { list: 'dl-cat' }), field(a, 'layer', { list: 'dl-layer' }), tags(a),
+      iconBtn('x', 'Remover animação', () => { cat.splice(i, 1); opt.onChange(true); draw(); }))),
+    h('div', { class: 'row' },
+      btn('Adicionar animação', () => { cat.push(mk.anim()); opt.onChange(true); draw(); }),
+      opt.applyAll ? btn('Aplicar a todas as conversas', opt.applyAll) : null));
+  draw();
+  return wrap;
+}
+
+/* memória / usuário / humor / resposta */
+function memoryEditor(conv, m) {
+  return h('div', null,
+    h('label', { class: 'field' }, h('span', null, 'Resumo (summary)'),
+      h('textarea', { value: m.summary ?? '', oninput: e => { m.summary = e.target.value; touch(); } })),
+    h('div', { class: 'field' }, h('span', null, 'key_facts (JSON)'), jsonArea(m, 'key_facts')));
+}
+function userEditor(conv, m) {
+  return h('textarea', { 'aria-label': 'Texto do usuário', value: m.text ?? '', oninput: e => { m.text = e.target.value; touch(); } });
+}
+function moodEditor(conv, m) {
+  const level = ([k, label]) => {
+    const out = h('b', null, String(m[k] ?? 5));
+    const input = h('input', {
+      type: 'range', min: 0, max: 10, step: 1, value: m[k] ?? 5, 'aria-label': label,
+      oninput: () => { m[k] = parseInt(input.value, 10); out.textContent = input.value; touch(); },
+    });
+    return h('label', { class: 'lvl' }, h('span', null, label), out, input);
+  };
+  return h('div', null,
+    h('label', { class: 'field' }, h('span', null, 'Emoção principal'),
+      h('input', { type: 'text', list: 'dl-emo', value: m.primary_emotion ?? '', oninput: e => { m.primary_emotion = e.target.value; touch(); } })),
+    h('div', { class: 'lvls' }, LEVELS.map(level)));
+}
+function answerEditor(conv, m) {
+  return h('div', null,
+    h('label', { class: 'field' }, h('span', null, 'Agente (agent_id)'),
+      h('input', { type: 'text', value: m.agent_id ?? '', oninput: e => { m.agent_id = e.target.value; touch(); } })),
+    timelineEditor(conv, m));
+}
+
+/* campos JSON com rascunho enquanto inválidos */
+function jsonArea(obj, key) {
+  const draft = (drafts.get(obj) || {})[key];
+  const ta = h('textarea', { class: 'code' + (draft && draft.error ? ' bad' : ''), spellcheck: 'false', 'aria-label': key });
+  ta.value = draft ? draft.text : JSON.stringify(obj[key] === undefined ? {} : obj[key], null, 2);
+  const err = h('p', { class: 'err-text', hidden: !(draft && draft.error) }, draft ? draft.error : '');
+  ta.addEventListener('input', () => {
+    const store = drafts.get(obj) || {};
+    drafts.set(obj, store);
+    try {
+      obj[key] = JSON.parse(ta.value);
+      delete store[key]; if (!Object.keys(store).length) drafts.delete(obj);
+      err.hidden = true; ta.classList.remove('bad');
+    } catch (e) {
+      store[key] = { text: ta.value, error: `${key}: JSON inválido (${e.message})` };
+      err.textContent = store[key].error; err.hidden = false; ta.classList.add('bad');
+    }
+    touch();
+  });
+  return h('div', null, ta, err);
+}
+function rawEditor(conv, m) {
+  const draft = (drafts.get(m) || {}).__raw__;
+  const ta = h('textarea', { class: 'code' + (draft && draft.error ? ' bad' : ''), spellcheck: 'false', 'aria-label': 'JSON da mensagem' });
+  ta.value = draft ? draft.text : JSON.stringify(m, null, 2);
+  const err = h('p', { class: 'err-text', hidden: !(draft && draft.error) }, draft ? draft.error : '');
+  ta.addEventListener('input', () => {
+    const store = drafts.get(m) || {};
+    drafts.set(m, store);
+    try {
+      const v = JSON.parse(ta.value);
+      if (!v || typeof v !== 'object' || Array.isArray(v) || !('role' in v)) throw new Error("precisa ser um objeto com 'role'");
+      for (const k of Object.keys(m)) delete m[k];
+      Object.assign(m, v);
+      delete store.__raw__; if (!Object.keys(store).length) drafts.delete(m);
+      err.hidden = true; ta.classList.remove('bad');
+    } catch (e) {
+      store.__raw__ = { text: ta.value, error: `Mensagem: JSON inválido (${e.message})` };
+      err.textContent = store.__raw__.error; err.hidden = false; ta.classList.add('bad');
+    }
+    touch();
+  });
+  return h('div', null, h('p', { class: 'muted small' }, 'Papel sem editor próprio: edite o JSON diretamente.'), ta, err);
+}
+
+/* linha do tempo (editável) */
+function autoGrow(ta) {
+  if (CSS.supports && CSS.supports('field-sizing', 'content')) return;
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; };
+  ta.addEventListener('input', fit); requestAnimationFrame(fit);
+}
+function fillAnimOptions(sel, conv, current) {
+  const ids = catalogIds(conv);
+  const opts = ids.map(id => h('option', { value: id }, id));
+  if (!ids.includes(current)) opts.unshift(h('option', { value: current ?? '' }, current ? `${current} (fora do catálogo)` : '(escolha a animação)'));
+  sel.replaceChildren(...opts);
+  sel.value = current ?? '';
+}
+function refreshAnimSelects() {
+  document.querySelectorAll('.anim-select').forEach(s => fillAnimOptions(s, s._conv, s._ev.animation_id));
+}
+const fmtW = v => (typeof v === 'number' ? v.toFixed(2) : String(v ?? '?'));
+
+function timelineEditor(conv, ans) {
+  if (!Array.isArray(ans.timeline)) ans.timeline = [];
+  const tl = ans.timeline;
+  const wrap = h('div');
+  const redraw = () => wrap.replaceChildren(h('div', { class: 'tl' }, tl.map(row)), h('div', { class: 'tl-add' },
+    btn('Adicionar ação', () => { tl.push(mk.action(catalogIds(conv)[0] || '')); touch(); refreshDerived(); redraw(); }),
+    btn('Adicionar fala', () => { tl.push(mk.speech()); touch(); refreshDerived(); redraw(); })));
+  const swap = (a, b) => { if (b < 0 || b >= tl.length) return; [tl[a], tl[b]] = [tl[b], tl[a]]; touch(); refreshDerived(); redraw(); };
+  const convert = (k, to) => {
+    const ev = tl[k];
+    const keep = {};
+    for (const key of Object.keys(ev)) if (!['event_role', 'text', 'animation_id', 'blend_weight'].includes(key)) keep[key] = ev[key];
+    forgetDrafts(ev);
+    tl[k] = { ...(to === 'action' ? mk.action(catalogIds(conv)[0] || '') : mk.speech()), ...keep };
+    touch(); refreshDerived(); redraw();
+  };
+  function row(ev, k) {
+    const role = ev && (ev.event_role === 'action' || ev.event_role === 'speech') ? ev.event_role : 'other';
+    const kind = h('select', { class: 'kind', 'aria-label': 'Tipo do evento', onchange: e => convert(k, e.target.value) },
+      h('option', { value: 'action' }, 'Ação'), h('option', { value: 'speech' }, 'Fala'), role === 'other' ? h('option', { value: 'other' }, 'Outro') : null);
+    kind.value = role;
+    let body;
+    if (role === 'action') {
+      const sel = h('select', { class: 'anim-select', 'aria-label': 'Animação', onchange: () => { ev.animation_id = sel.value; touch(); refreshDerived(); } });
+      sel._conv = conv; sel._ev = ev; fillAnimOptions(sel, conv, ev.animation_id);
+      const out = h('b', null, fmtW(ev.blend_weight));
+      const range = h('input', {
+        type: 'range', min: 0, max: 1, step: 0.05, value: Number(ev.blend_weight) || 0, 'aria-label': 'Peso da animação (blend_weight)',
+        oninput: () => { ev.blend_weight = Math.round(parseFloat(range.value) * 100) / 100; out.textContent = fmtW(ev.blend_weight); touch(); },
+      });
+      body = h('div', { class: 'ev-act' }, sel, range, out);
+    } else if (role === 'speech') {
+      body = h('textarea', { 'aria-label': 'Fala', value: ev.text ?? '', oninput: e => { ev.text = e.target.value; touch(); } });
+      autoGrow(body);
+    } else body = rawEditor(conv, ev);
+    return h('div', { class: 'ev ev-' + role },
+      h('span', { class: 'mark' }),
+      h('div', { class: 'ev-fields' }, kind, body),
+      h('div', { class: 'ev-tools' },
+        iconBtn('up', 'Mover evento para cima', () => swap(k, k - 1)),
+        iconBtn('down', 'Mover evento para baixo', () => swap(k, k + 1)),
+        iconBtn('x', 'Remover evento', () => { forgetDrafts(ev); tl.splice(k, 1); touch(); refreshDerived(); redraw(); })));
+  }
+  redraw();
+  return wrap;
+}
+
+/* linha do tempo e humor (somente leitura, usados no chat) */
+function meter(value, max, label) {
+  return h('span', { class: 'wv' }, h('span', { class: 'bar' }, h('i', { style: `width:${clamp(Number(value) / max, 0, 1) * 100}%` })), h('b', null, label));
+}
+function timelineView(events, fresh) {
+  return h('div', { class: 'tl' + (fresh ? ' reveal' : '') }, (Array.isArray(events) ? events : []).map((ev, i) => {
+    const style = `--i:${i}`;
+    if (ev && ev.event_role === 'action') return h('div', { class: 'ev ev-action', style }, h('span', { class: 'mark' }),
+      h('div', { class: 'ev-main' }, h('code', { class: 'anim' }, ev.animation_id ?? '?'), meter(ev.blend_weight, 1, fmtW(ev.blend_weight))));
+    if (ev && ev.event_role === 'speech') return h('div', { class: 'ev ev-speech', style }, h('span', { class: 'mark' }), h('p', { class: 'say' }, ev.text ?? ''));
+    return h('div', { class: 'ev ev-other', style }, h('span', { class: 'mark' }), h('code', null, JSON.stringify(ev)));
+  }));
+}
+function moodView(m) {
+  return h('div', { class: 'mood' }, h('span', { class: 'emo' }, m.primary_emotion ?? '—'),
+    LEVELS.map(([k, label]) => h('span', { class: 'lv', title: `${k}: ${m[k]}` }, h('span', null, label),
+      h('span', { class: 'bar' }, h('i', { style: `width:${clamp(Number(m[k]) || 0, 0, 10) * 10}%` })), h('b', null, String(m[k] ?? '?')))));
+}
+
+/* ----------------------------------------------------------------- chat */
+function buildChatSide() {
+  $('#chat-side').replaceChildren(
+    h('h2', { class: 'side-h' }, 'Modelo'),
+    h('div', { id: 'model-banner' }),
+    h('label', { class: 'field' }, h('span', null, 'Modelo base'), h('input', { id: 'm-name', type: 'text' })),
+    h('label', { class: 'field' }, h('span', null, 'Pasta do adapter'), h('input', { id: 'm-adapter', type: 'text' })),
+    h('div', { class: 'row' }, h('button', { id: 'm-load', class: 'btn primary', type: 'button', onclick: loadModel }, 'Carregar modelo')),
+    h('div', { id: 'model-status', class: 'model-line' }),
+    h('h2', { class: 'side-h' }, 'Contexto enviado'),
+    h('div', { id: 'chat-cat' }),
+    h('label', { class: 'row small' }, h('input', { id: 'mem-on', type: 'checkbox', onchange: e => { S.chat.memoryOn = e.target.checked; $('#mem-box').hidden = !S.chat.memoryOn; } }), 'Incluir memória'),
+    h('div', { id: 'mem-box', hidden: true }),
+    h('h2', { class: 'side-h' }, 'Geração'),
+    h('label', { class: 'field' }, h('span', null, 'Máximo de tokens novos'),
+      h('input', { type: 'number', min: 16, max: 1024, step: 16, value: S.chat.maxTokens, oninput: e => { S.chat.maxTokens = parseInt(e.target.value, 10) || 256; } })),
+    h('h2', { class: 'side-h' }, 'Conversa'),
+    h('div', { class: 'row' }, btn('Nova conversa', newChat)),
+    h('label', { class: 'field' }, h('span', null, 'Adicionar ao dataset'), h('select', { id: 'target' })),
+    h('button', { id: 'to-editor', class: 'btn', type: 'button', onclick: sendToEditor }, 'Enviar para o editor'));
+  $('#composer').replaceChildren(
+    h('textarea', {
+      id: 'input', rows: 2, placeholder: 'Escreva como o usuário. Enter envia, Shift+Enter quebra a linha.', 'aria-label': 'Mensagem do usuário',
+      onkeydown: e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); } },
+    }),
+    h('button', { id: 'send', class: 'btn primary', type: 'button', onclick: sendMessage }, 'Enviar'));
+}
+function ensureChatContext() {
+  const c = S.chat;
+  if (!c.catalog) c.catalog = mk.system(S.defaults.catalog);
+  if (!c.memory) c.memory = mk.memory();
+  if (!$('#chat-cat').firstChild) {
+    $('#chat-cat').replaceChildren(h('details', { class: 'fold' },
+      h('summary', null, 'Catálogo de animações'),
+      catalogEditor(c.catalog, { onChange: () => {}, applyAll: null }),
+      btn('Copiar do dataset aberto', () => {
+        const conv = S.cur && S.cur.data[S.sel];
+        const cat = conv ? catalogOf(conv) : [];
+        if (!cat.length) { toast('Nenhum catálogo no dataset aberto.', 'err'); return; }
+        c.catalog = mk.system(cat);
+        $('#chat-cat').replaceChildren(); ensureChatContext();
+        toast('Catálogo copiado.');
+      })));
+  }
+  if (!$('#mem-box').firstChild) $('#mem-box').replaceChildren(memoryEditorChat(c.memory));
+}
+function memoryEditorChat(m) {
+  return h('div', null,
+    h('label', { class: 'field' }, h('span', null, 'Resumo (summary)'), h('textarea', { value: m.summary, oninput: e => { m.summary = e.target.value; } })),
+    h('div', { class: 'field' }, h('span', null, 'key_facts (JSON)'), jsonAreaChat(m)));
+}
+function jsonAreaChat(m) {
+  const ta = h('textarea', { class: 'code', spellcheck: 'false', 'aria-label': 'key_facts' });
+  ta.value = JSON.stringify(m.key_facts, null, 2);
+  const err = h('p', { class: 'err-text', hidden: true });
+  ta.addEventListener('input', () => {
+    try { m.key_facts = JSON.parse(ta.value); err.hidden = true; ta.classList.remove('bad'); }
+    catch (e) { err.textContent = `JSON inválido (${e.message})`; err.hidden = false; ta.classList.add('bad'); }
+  });
+  return h('div', null, ta, err);
+}
+function updateTargets() {
+  const sel = $('#target');
+  const prev = sel.value || (S.cur && S.cur.name) || '';
+  sel.replaceChildren(...S.files.map(f => h('option', { value: f.name }, f.name + '.json')));
+  if (S.files.some(f => f.name === prev)) sel.value = prev;
+}
+async function refreshModel() {
+  try { S.model = await api('GET', '/api/model'); } catch (e) { S.model = { ...S.model, state: 'error', error: e.message }; }
+  renderModel();
+}
+function renderModel() {
+  const m = S.model;
+  const name = $('#m-name'), adapter = $('#m-adapter');
+  if (!name.value) name.value = m.model || '';
+  if (!adapter.value) adapter.value = m.adapter || '';
+  $('#model-banner').replaceChildren(...(m.mock ? [h('p', { class: 'banner' }, 'Modo de teste: as respostas são simuladas, não vêm do modelo.')] : []));
+  const text = { idle: 'Não carregado', loading: 'Carregando… pode levar um minuto', ready: 'Pronto', error: 'Falhou ao carregar' }[m.state] || m.state;
+  $('#model-status').replaceChildren(...[
+    h('span', { class: 'dot ' + m.state }), h('span', null, text),
+    m.state === 'error' && m.error ? h('p', { class: 'err-text' }, m.error) : null,
+  ].filter(Boolean));
+  $('#m-load').disabled = m.state === 'loading';
+  $('#m-load').textContent = m.state === 'ready' ? 'Recarregar modelo' : 'Carregar modelo';
+  updateComposer();
+}
+async function loadModel() {
+  try {
+    S.model = await api('POST', '/api/model/load', { model: $('#m-name').value.trim(), adapter: $('#m-adapter').value.trim() });
+    renderModel();
+    const poll = async () => { await refreshModel(); if (S.model.state === 'loading') setTimeout(poll, 800); };
+    setTimeout(poll, 800);
+  } catch (e) { toast(e.message, 'err'); }
+}
+function updateComposer() {
+  const ready = S.model.state === 'ready';
+  const ta = $('#input'), send = $('#send');
+  if (!ta) return;
+  ta.disabled = !ready || S.chat.busy;
+  send.disabled = !ready || S.chat.busy;
+  if (!ready) ta.placeholder = 'Carregue o modelo (painel à esquerda) para conversar.';
+  else ta.placeholder = 'Escreva como o usuário. Enter envia, Shift+Enter quebra a linha.';
+  send.textContent = S.chat.busy ? 'Gerando…' : 'Enviar';
+}
+function enterChat() {
+  ensureChatContext(); updateTargets(); refreshModel(); renderTranscript();
+}
+function newChat() { S.chat.turns = []; renderTranscript(); }
+
+function buildContext() {
+  const c = S.chat;
+  const ctx = [clone(c.catalog)];
+  if (c.memoryOn) ctx.push(clone(c.memory));
+  for (const t of c.turns) {
+    if (!t.answer) continue;
+    ctx.push({ role: 'user', text: t.user });
+    if (t.mood) ctx.push(t.mood);
+    ctx.push(t.answer);
+  }
+  return ctx;
+}
+async function sendMessage() {
+  const ta = $('#input');
+  const text = ta.value.trim();
+  if (!text || S.chat.busy || S.model.state !== 'ready') return;
+  const context = buildContext();
+  context.push({ role: 'user', text });
+  const turn = { user: text, status: 'pending' };
+  S.chat.turns.push(turn); S.chat.busy = true; ta.value = '';
+  renderTranscript(); updateComposer();
+  try {
+    const r = await api('POST', '/api/chat', { context, max_new_tokens: S.chat.maxTokens });
+    Object.assign(turn, {
+      status: r.answer ? 'ok' : 'partial', raw: r.raw, mood: r.mood, answer: r.answer,
+      junk: r.junk, extra: r.extra, stoppedAt: r.stopped_at, prompt: r.prompt, seconds: r.seconds, fresh: true,
+    });
+  } catch (e) { turn.status = 'error'; turn.error = e.message; }
+  S.chat.busy = false;
+  renderTranscript(); updateComposer();
+  if (S.mode === 'chat') $('#input').focus();
+}
+function retryLast() {
+  const last = S.chat.turns[S.chat.turns.length - 1];
+  if (!last || S.chat.busy) return;
+  S.chat.turns.pop();
+  $('#input').value = last.user;
+  renderTranscript();
+  sendMessage();
+}
+function renderTranscript() {
+  const box = $('#transcript');
+  const turns = S.chat.turns;
+  if (!turns.length) {
+    box.replaceChildren(emptyState('Converse com a Lisa', S.model.state === 'ready' ? 'Escreva uma mensagem abaixo.' : 'Carregue o modelo no painel à esquerda e escreva uma mensagem.'));
+    return;
+  }
+  box.replaceChildren(...turns.map((t, i) => {
+    const user = h('div', { class: 'say-user' }, h('span', { class: 'who' }, 'Você'), t.user);
+    let reply;
+    if (t.status === 'pending') reply = h('div', { class: 'reply' }, h('span', { class: 'who' }, 'Lisa'), h('p', { class: 'muted' }, 'Gerando…'));
+    else if (t.status === 'error') reply = h('div', { class: 'reply' }, h('span', { class: 'who' }, 'Lisa'), h('p', { class: 'err-text' }, t.error));
+    else {
+      const notes = [];
+      if (!t.answer) notes.push('O modelo não gerou um objeto "answer" válido. Este turno não entra no contexto das próximas mensagens.');
+      if (!t.mood) notes.push('O modelo não gerou "mood".');
+      if (t.stoppedAt) notes.push(`A saída foi cortada onde o modelo começou a inventar uma mensagem "${t.stoppedAt}".`);
+      if (t.junk && t.junk.length) notes.push('Parte da saída não era JSON válido (veja a saída bruta).');
+      reply = h('div', { class: 'reply' },
+        h('span', { class: 'who' }, 'Lisa'),
+        t.mood ? moodView(t.mood) : null,
+        t.answer ? timelineView(t.answer.timeline, t.fresh) : null,
+        ...notes.map(n => h('p', { class: 'note' }, n)),
+        h('details', { class: 'raw' }, h('summary', { class: 'small muted' }, `Saída bruta${t.seconds != null ? ` (${t.seconds}s)` : ''}`),
+          h('pre', null, t.raw ?? ''),
+          h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Prompt enviado'), h('pre', null, t.prompt ?? '')),
+        i === turns.length - 1 ? h('div', { class: 'reply-tools' }, btn('Gerar de novo', retryLast)) : null);
+      t.fresh = false;
+    }
+    return h('div', null, user, reply);
+  }));
+  const pane = box.parentElement;
+  pane.scrollTop = pane.scrollHeight;
+}
+async function sendToEditor() {
+  const turns = S.chat.turns.filter(t => t.answer);
+  if (!turns.length) { toast('Ainda não há respostas para enviar.', 'err'); return; }
+  const target = $('#target').value;
+  if (!target) { toast('Escolha um dataset.', 'err'); return; }
+  if (!S.cur || S.cur.name !== target) {
+    if (S.cur && S.cur.dirty && !await askConfirm(`Descartar as alterações não salvas em ${S.cur.name}.json para abrir ${target}.json?`, { ok: 'Descartar', danger: true })) return;
+    S.cur = null;
+    await openFile(target);
+    if (!S.cur) return;
+  }
+  const conv = [clone(S.chat.catalog)];
+  if (S.chat.memoryOn) conv.push(clone(S.chat.memory));
+  for (const t of turns) {
+    conv.push({ role: 'user', text: t.user });
+    if (t.mood) conv.push(clone(t.mood));
+    conv.push(clone(t.answer));
+  }
+  S.cur.data.push(conv); S.sel = S.cur.data.length - 1;
+  S.filter = ''; $('#filter').value = '';
+  touch(); setMode('datasets'); renderAll();
+  toast('Conversa adicionada. Revise, corrija e salve.');
+}
+
+/* ------------------------------------------------------------------ init */
+async function init() {
+  buildSidebar(); buildChatSide();
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
+  $('#save').addEventListener('click', () => saveFile());
+  $('#side-toggle').textContent = 'Arquivos e conversas';
+  $('#side-toggle').addEventListener('click', () => document.body.classList.toggle('side-open'));
+  window.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (S.mode === 'datasets') saveFile(); }
+  });
+  window.addEventListener('beforeunload', e => { if (S.cur && S.cur.dirty) { e.preventDefault(); e.returnValue = ''; } });
+  renderEditor(); renderStatus();
+  try {
+    const [, defaults] = await Promise.all([refreshFiles(), api('GET', '/api/defaults').catch(() => null)]);
+    if (defaults) {
+      S.defaults = defaults;
+      $('#dl-emo').replaceChildren(...defaults.emotions.map(e => h('option', { value: e })));
+    }
+    refreshModel();
+    if (S.files.length) await openFile(S.files.find(f => !f.error)?.name || S.files[0].name);
+  } catch (e) { toast(e.message, 'err'); }
+}
+init();
+</script>
+</body>
+</html>
