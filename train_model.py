@@ -21,6 +21,10 @@ print("VRAM:", torch.cuda.get_device_properties(0).total_memory / 1024**3)
 
 MODEL_NAME = "Qwen/Qwen3-1.7B-Base"
 
+# Cada exemplo é uma conversa inteira (system + turnos). Se passar disso, o
+# fim é cortado, e o fim é justamente o mood/answer que o modelo precisa aprender.
+MAX_LENGTH = 1024
+
 # Quantização de 4 bits
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -99,6 +103,15 @@ dataset = concatenate_datasets(datasets)
 dataset = dataset.filter(lambda ex: isinstance(ex.get("text"), str) and ex["text"].strip() != "")
 dataset = dataset.shuffle(seed=42)
 
+lengths = [len(tokenizer(text)["input_ids"]) for text in dataset["text"]]
+print(f"Exemplos: {len(lengths)} | tokens por exemplo: máx {max(lengths)}, limite {MAX_LENGTH}")
+too_long = sum(1 for n in lengths if n > MAX_LENGTH)
+if too_long:
+    raise RuntimeError(
+        f"{too_long} exemplo(s) passam de {MAX_LENGTH} tokens e seriam cortados "
+        "(perdendo o mood/answer). Aumente MAX_LENGTH ou encurte as conversas."
+    )
+
 training_config = SFTConfig(
     output_dir="./qwen-adapter",
     num_train_epochs=3,
@@ -111,7 +124,7 @@ training_config = SFTConfig(
     bf16=False,
 
     gradient_checkpointing=True,
-    max_length=512,
+    max_length=MAX_LENGTH,
 
     dataset_text_field="text",
     packing=False,
