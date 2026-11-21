@@ -1,0 +1,166 @@
+
+import traceback
+
+import torch
+from pathlib import Path
+from datasets import concatenate_datasets, load_dataset
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    BitsAndBytesConfig
+)
+from peft import (
+    LoraConfig,
+    prepare_model_for_kbit_training
+)
+from trl import SFTConfig, SFTTrainer
+
+print("CUDA:", torch.cuda.is_available())
+print("GPU:", torch.cuda.get_device_name(0))
+print("VRAM:", torch.cuda.get_device_properties(0).total_memory / 1024**3)
+
+MODEL_NAME = "Qwen/Qwen3-1.7B-Base"
+
+# Quantização de 4 bits
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_use_double_quant=True
+)
+
+tokenizer = AutoTokenizer.from_pretrained(
+    MODEL_NAME
+)
+
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+
+
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_use_double_quant=True
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    quantization_config=bnb_config,
+    device_map="auto",
+    dtype=torch.float16
+)
+
+model.config.use_cache = False
+
+model = prepare_model_for_kbit_training(
+    model,
+    use_gradient_checkpointing=True
+)
+
+# Configuração LoRA
+lora_config = LoraConfig(
+    r=8,
+    lora_alpha=16,
+    lora_dropout=0.05,
+    bias="none",
+    task_type="CAUSAL_LM",
+    target_modules=[
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+    ]
+)
+
+dataset_dir = Path(__file__).resolve().parent / ".datasets"
+dataset_files = sorted(dataset_dir.glob("*.jsonl"))
+
+if not dataset_files:
+    raise RuntimeError("Nenhum arquivo JSONL encontrado.")
+
+datasets = []
+
+for file in dataset_files:
+    print(f"Carregando: {file.name}")
+
+    current = load_dataset(
+        "json",
+        data_files=str(file),
+        split="train"
+    )
+
+    datasets.append(current)
+
+dataset = concatenate_datasets(datasets)
+dataset = dataset.filter(lambda ex: isinstance(ex.get("text"), str) and ex["text"].strip() != "")
+dataset = dataset.shuffle(seed=42)
+
+training_config = SFTConfig(
+    output_dir="./qwen-adapter",
+    num_train_epochs=3,
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=8,
+    learning_rate=2e-4,
+    warmup_steps=10,
+
+    fp16=True,
+    bf16=False,
+
+    gradient_checkpointing=True,
+    max_length=512,
+
+    dataset_text_field="text",
+    packing=False,
+
+    logging_steps=10,
+    save_steps=100,
+    save_total_limit=2,
+
+    optim="paged_adamw_8bit",
+    report_to="none",
+)
+
+print(dataset.column_names)
+
+bad = [i for i, t in enumerate(dataset["text"]) if not isinstance(t, str) or not t.strip()]
+print(f"{len(bad)} linhas inválidas de {len(dataset)}")
+if bad:
+    print("Exemplo:", dataset[bad[0]])
+
+try:
+    trainer = SFTTrainer(
+        model=model,
+        args=training_config,
+        train_dataset=dataset,
+        processing_class=tokenizer,
+        peft_config=lora_config,
+    )
+    
+except Exception:
+    traceback.print_exc()
+    raise
+
+for name, param in trainer.model.named_parameters():
+    if param.requires_grad and param.dtype != torch.float32:
+        param.data = param.data.to(torch.float32)
+
+print("\n=== PRECISION DEBUG ===")
+print("FP16:", trainer.args.fp16)
+print("BF16:", trainer.args.bf16)
+
+for name, param in model.named_parameters():
+    if param.requires_grad:
+        print(f"{name}: {param.dtype}, device={param.device}")
+
+print("=======================\n")
+
+trainer.train()
+
+trainer.save_model("./qwen-adapter")
+tokenizer.save_pretrained("./qwen-adapter")
+
+print("Treinamento concluído!")
