@@ -27,6 +27,7 @@ import time
 import traceback
 import webbrowser
 from collections import Counter
+from prompting import render_prompt
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -176,10 +177,24 @@ def save_dataset_api(name, body):
     return {"hash": sha(raw), "size": len(raw)}
 
 
+DEFAULT_TOOLS = [
+    {
+        "name": "recall_fact",
+        "description": "Look up a remembered fact that the context may no longer contain.",
+        "parameters": {"query": "string"},
+    },
+    {
+        "name": "recall_person",
+        "description": "Look up what is remembered about a specific person.",
+        "parameters": {"name": "string"},
+    },
+]
+
+
 def compute_defaults():
     """Catálogo, emoções e agent_id mais comuns nos datasets existentes."""
-    catalogs, emotions, agents = Counter(), Counter(), Counter()
-    catalog_by_key = {}
+    catalogs, emotions, agents, tool_sets = Counter(), Counter(), Counter(), Counter()
+    catalog_by_key, tools_by_key = {}, {}
     for path in sorted(DATASETS_DIR.glob("*.json")):
         try:
             _, data = read_dataset(path)
@@ -198,6 +213,10 @@ def compute_defaults():
                     key = json.dumps(msg["animation_catalog"], ensure_ascii=False)
                     catalogs[key] += 1
                     catalog_by_key[key] = msg["animation_catalog"]
+                    if isinstance(msg.get("tools"), list) and msg["tools"]:
+                        tkey = json.dumps(msg["tools"], ensure_ascii=False)
+                        tool_sets[tkey] += 1
+                        tools_by_key[tkey] = msg["tools"]
                 elif role == "mood" and isinstance(msg.get("primary_emotion"), str):
                     emotions[msg["primary_emotion"]] += 1
                 elif role == "branch" and isinstance(msg.get("mood"), dict) and isinstance(msg["mood"].get("primary_emotion"), str):
@@ -205,8 +224,10 @@ def compute_defaults():
                 elif role == "answer" and isinstance(msg.get("agent_id"), str):
                     agents[msg["agent_id"]] += 1
     catalog = catalog_by_key[catalogs.most_common(1)[0][0]] if catalogs else []
+    tools = tools_by_key[tool_sets.most_common(1)[0][0]] if tool_sets else DEFAULT_TOOLS
     return {
         "catalog": catalog,
+        "tools": tools,
         "emotions": sorted(e for e in emotions if e),
         "agent_id": agents.most_common(1)[0][0] if agents else "Lisa",
     }
@@ -246,14 +267,17 @@ def parse_model_output(text):
         pos = end
 
     mood = answer = None
+    tool_calls = []
     extra = []
     stopped_at = None
     for obj in objects:
         role = obj.get("role") if isinstance(obj, dict) else None
-        if role in ("user", "system"):
-            stopped_at = role
+        if role in ("user", "system", "tool_result"):
+            stopped_at = role  # o modelo começou a inventar o que não é dele
             break
-        if role == "mood" and mood is None and answer is None:
+        if role == "tool_call" and mood is None and answer is None:
+            tool_calls.append(obj)
+        elif role == "mood" and mood is None and answer is None:
             mood = obj
         elif role == "answer" and answer is None:
             answer = obj
@@ -262,6 +286,7 @@ def parse_model_output(text):
     return {
         "mood": mood,
         "answer": answer,
+        "tool_calls": tool_calls,
         "extra": extra,
         "junk": junk,
         "stopped_at": stopped_at,
@@ -269,10 +294,8 @@ def parse_model_output(text):
 
 
 def build_prompt(context):
-    # Mesma serialização do LisaInference.generate (só para exibir na GUI):
-    # sem mensagens 'mood', uma mensagem JSON por linha, terminando em "\n".
-    items = [item for item in context if item.get("role") not in ("mood", "branch")]
-    return "\n".join(json.dumps(item, ensure_ascii=False) for item in items) + "\n"
+    # Mesmo prompt do treino e de LisaInference.generate (prompting.render_prompt).
+    return render_prompt(context)
 
 
 # --------------------------------------------------------------------------
@@ -293,6 +316,25 @@ class MockModel:
         last_user = next(
             (m.get("text", "") for m in reversed(context) if m.get("role") == "user"), ""
         )
+        # Pede uma memória antes de responder, se o usuário pedir para lembrar
+        # e ainda não houver tool_result neste turno (testa o ciclo de tools).
+        last_user_at = max((i for i, m in enumerate(context) if m.get("role") == "user"), default=-1)
+        has_result = any(m.get("role") == "tool_result" for m in context[last_user_at + 1:])
+        tools = set()
+        for item in context:
+            if isinstance(item, dict) and item.get("role") == "system":
+                tools = {t.get("name") for t in item.get("tools", []) if isinstance(t, dict)}
+        lowered = last_user.lower()
+        if not has_result and ("lembr" in lowered or "remember" in lowered):
+            if "mochi" in lowered and "recall_person" in tools:
+                call = {"role": "tool_call", "name": "recall_person", "arguments": {"name": "Mochi"}}
+            elif "recall_fact" in tools:
+                call = {"role": "tool_call", "name": "recall_fact", "arguments": {"query": last_user[:60]}}
+            else:
+                call = None
+            if call:
+                return json.dumps(call, ensure_ascii=False) + "\n" + json.dumps(
+                    {"role": "user", "text": "texto inventado que deve ser descartado"}, ensure_ascii=False)
         timeline = []
         if animations:
             timeline.append(

@@ -58,6 +58,22 @@
                         "offended"
                     ]
                 }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
+                }
             ]
         },
         {
@@ -157,6 +173,22 @@
                         "playful",
                         "offended"
                     ]
+                }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
                 }
             ]
         },
@@ -288,6 +320,22 @@
                         "offended"
                     ]
                 }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
+                }
             ]
         },
         {
@@ -387,6 +435,22 @@
                         "playful",
                         "offended"
                     ]
+                }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
                 }
             ]
         },
@@ -526,6 +590,22 @@
                         "offended"
                     ]
                 }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
+                }
             ]
         },
         {
@@ -625,6 +705,22 @@
                         "playful",
                         "offended"
                     ]
+                }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
                 }
             ]
         },
@@ -726,6 +822,22 @@
                         "offended"
                     ]
                 }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
+                }
             ]
         },
         {
@@ -825,6 +937,22 @@
                         "playful",
                         "offended"
                     ]
+                }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
                 }
             ]
         },
@@ -926,6 +1054,22 @@
                         "offended"
                     ]
                 }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
+                }
             ]
         },
         {
@@ -1025,6 +1169,22 @@
                         "playful",
                         "offended"
                     ]
+                }
+            ],
+            "tools": [
+                {
+                    "name": "recall_fact",
+                    "description": "Look up a remembered fact that the context may no longer contain.",
+                    "parameters": {
+                        "query": "string"
+                    }
+                },
+                {
+                    "name": "recall_person",
+                    "description": "Look up what is remembered about a specific person.",
+                    "parameters": {
+                        "name": "string"
+                    }
                 }
             ]
         },

@@ -139,6 +139,16 @@ textarea.code { min-height: 5em; }
 .bchip[aria-selected="true"] { background: var(--blue-soft); border-color: var(--blue); font-weight: 600; }
 .branchbar .btn { padding: 1px 10px; font-size: 13px; }
 .msg.in-branch .bubble { box-shadow: -3px 0 0 var(--blue); }
+.msg-tool_call .bubble, .msg-tool_result .bubble { background: var(--amber-soft); border: 1px solid var(--amber); border-radius: 12px; padding: 4px 12px 7px; font-size: 13px; }
+.msg-tool_result { justify-content: flex-end; }
+.msg-tool_call.editing .bubble, .msg-tool_result.editing .bubble { flex: 1; max-width: 100%; }
+.tname { font-weight: 700; color: var(--amber); margin-right: 8px; }
+.tcall { overflow-wrap: anywhere; }
+.tres { margin: 0; font: 12.5px/1.4 var(--code); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tool-ed { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+.tool-row { display: grid; grid-template-columns: minmax(120px, 1fr) 2.4fr 28px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.tx { border: 1px solid var(--amber); background: var(--amber-soft); border-radius: 10px; padding: 4px 10px 6px; margin: 4px 0; font-size: 13px; }
+.tx .tres { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--amber); }
 .reveal .say, .reveal .chip { animation: cue .45s ease-out both; animation-delay: calc(var(--i) * 110ms); }
 .flash .bubble { animation: flash 1.2s ease-out; }
 @keyframes flash { 50% { box-shadow: 0 0 0 4px var(--blue-soft); } }
@@ -354,7 +364,7 @@ const S = {
   mode: 'datasets',
   files: [], cur: null, sel: -1, filter: '',
   convIssues: [],
-  defaults: { catalog: [], emotions: [], agent_id: 'Lisa' },
+  defaults: { catalog: [], tools: [], emotions: [], agent_id: 'Lisa' },
   ui: { open: new Set() },
   model: { state: 'idle', error: null, mock: false, model: '', adapter: '' },
   chat: { catalog: null, memoryOn: false, memory: null, turns: [], maxTokens: 256, busy: false },
@@ -362,13 +372,20 @@ const S = {
 const editing = new WeakSet(); // mood/answer abertos para edição
 const drafts = new Map(); // objeto -> {chave: {text, error}}  (JSON ainda inválido)
 
-const ROLE_LABEL = { system: 'Sistema', memory: 'Memória', user: 'Usuário', mood: 'Humor', answer: 'Resposta', branch: 'Ramo' };
+const ROLE_LABEL = { system: 'Sistema', memory: 'Memória', user: 'Usuário', mood: 'Humor', answer: 'Resposta', branch: 'Ramo', tool_call: 'Tool call', tool_result: 'Resultado' };
 const branchSel = new WeakMap(); // mensagem 'user' -> ramo exibido (0 = principal)
 const LEVELS = [['shyness_level', 'Timidez'], ['comfort_level', 'Conforto'], ['distraction_level', 'Distração'], ['energy_level', 'Energia']];
 
 // A ordem das chaves é a que o modelo viu no treino; nunca reordene.
 const mk = {
-  system: catalog => ({ role: 'system', animation_catalog: clone(catalog) }),
+  system: (catalog, tools) => {
+    const o = { role: 'system', animation_catalog: clone(catalog) };
+    if (Array.isArray(tools)) o.tools = clone(tools);
+    return o;
+  },
+  tool: () => ({ name: '', description: '', parameters: {} }),
+  toolCall: (name = '', args = {}) => ({ role: 'tool_call', name, arguments: args }),
+  toolResult: (name = '', content = {}) => ({ role: 'tool_result', name, content }),
   memory: () => ({ role: 'memory', summary: '', key_facts: {} }),
   user: (text = '') => ({ role: 'user', text }),
   mood: () => ({ role: 'mood', primary_emotion: '', shyness_level: 5, comfort_level: 5, distraction_level: 3, energy_level: 5 }),
@@ -395,6 +412,11 @@ const catalogOf = conv => {
   return sys && Array.isArray(sys.animation_catalog) ? sys.animation_catalog : [];
 };
 const catalogIds = conv => catalogOf(conv).map(a => a && a.id).filter(x => typeof x === 'string' && x !== '');
+const toolsOf = conv => {
+  const sys = conv.find(m => m && m.role === 'system');
+  return sys && Array.isArray(sys.tools) ? sys.tools : [];
+};
+const toolNames = conv => toolsOf(conv).map(t => t && t.name).filter(x => typeof x === 'string' && x !== '');
 const firstUser = conv => (conv.find(m => m && m.role === 'user' && typeof m.text === 'string') || {}).text || '';
 const searchText = conv => conv.map(m => [m.text, m.summary, ...(Array.isArray(m.timeline) ? m.timeline.map(e => e && e.text) : []), ...(m.answer && Array.isArray(m.answer.timeline) ? m.answer.timeline.map(e => e && e.text) : [])].filter(Boolean).join(' ')).join(' ').toLowerCase();
 
@@ -403,6 +425,9 @@ function validateConv(conv) {
   const out = [];
   const add = (level, text, mi) => out.push({ level, text, mi });
   const ids = new Set(catalogIds(conv));
+  const toolsList = toolsOf(conv);
+  const toolSet = new Set(toolNames(conv));
+  let pending = [];
   const systems = conv.filter(m => m.role === 'system');
   if (!systems.length) add('warn', 'Falta a mensagem system com o animation_catalog.');
   if (systems.length > 1) add('warn', 'Há mais de uma mensagem system.');
@@ -436,7 +461,11 @@ function validateConv(conv) {
       } else add('warn', `${where}: event_role desconhecido (${JSON.stringify(ev.event_role)}).`, i);
     });
   };
-  const closeTurn = () => { if (turn && !hasAnswer) add('warn', `Turno ${turn}: sem resposta.`, lastUserIdx); };
+  const closeTurn = () => {
+    if (turn && !hasAnswer) add('warn', `Turno ${turn}: sem resposta.`, lastUserIdx);
+    if (pending.length) add('warn', `Turno ${turn}: tool call sem resultado (${pending.join(', ')}).`, lastUserIdx);
+    pending = [];
+  };
   conv.forEach((m, i) => {
     switch (m.role) {
       case 'system': {
@@ -447,6 +476,18 @@ function validateConv(conv) {
           else seen.add(a.id);
         });
         if (!Array.isArray(m.animation_catalog) || !m.animation_catalog.length) add('warn', 'Catálogo de animações vazio.', i);
+        if (m.tools !== undefined) {
+          if (!Array.isArray(m.tools)) add('warn', "'tools' precisa ser uma lista.", i);
+          else {
+            const seenT = new Set();
+            m.tools.forEach(t => {
+              if (!t || typeof t.name !== 'string' || !t.name.trim()) add('error', 'Há uma tool sem name.', i);
+              else if (seenT.has(t.name)) add('warn', `Nome de tool repetido: ${t.name}.`, i);
+              else seenT.add(t.name);
+              if (t && t.parameters !== undefined && (!t.parameters || typeof t.parameters !== 'object' || Array.isArray(t.parameters))) add('warn', `Tool ${t.name || '?'}: parameters precisa ser um objeto.`, i);
+            });
+          }
+        }
         break;
       }
       case 'memory':
@@ -457,7 +498,29 @@ function validateConv(conv) {
         closeTurn(); turn++; hasMood = false; hasAnswer = false; lastUserIdx = i; branchCount = 0; turnEmos = [];
         if (typeof m.text !== 'string' || !m.text.trim()) add('warn', `Turno ${turn}: mensagem do usuário vazia.`, i);
         break;
+      case 'tool_call': {
+        if (!turn) { add('warn', 'Tool call antes de qualquer mensagem do usuário.', i); break; }
+        if (hasMood || hasAnswer) add('warn', `Turno ${turn}: o tool call deveria vir antes do mood e da resposta.`, i);
+        const tl = toolsList.find(t => t && t.name === m.name);
+        if (typeof m.name !== 'string' || !m.name.trim()) add('warn', `Turno ${turn}: tool call sem name.`, i);
+        else if (!toolSet.has(m.name)) add('error', `Turno ${turn}: a tool "${m.name}" não está listada em tools no system.`, i);
+        if (!m.arguments || typeof m.arguments !== 'object' || Array.isArray(m.arguments)) add('warn', `Turno ${turn}: arguments precisa ser um objeto.`, i);
+        else if (tl && tl.parameters && typeof tl.parameters === 'object') {
+          const extra = Object.keys(m.arguments).filter(k => !(k in tl.parameters));
+          if (extra.length) add('warn', `Turno ${turn}: argumento(s) fora dos parameters de ${m.name}: ${extra.join(', ')}.`, i);
+        }
+        pending.push(m.name);
+        break;
+      }
+      case 'tool_result': {
+        if (!turn) { add('warn', 'Resultado de tool antes de qualquer mensagem do usuário.', i); break; }
+        if (!pending.length) add('warn', `Turno ${turn}: resultado de tool sem tool call antes dele.`, i);
+        else { const want = pending.shift(); if (want !== m.name) add('warn', `Turno ${turn}: o resultado é de "${m.name}", mas o tool call pendente era "${want}".`, i); }
+        if (m.content === undefined) add('warn', `Turno ${turn}: resultado de tool sem content.`, i);
+        break;
+      }
       case 'mood':
+        if (pending.length) add('warn', `Turno ${turn}: o mood veio antes do resultado da tool.`, i);
         hasMood = true;
         turnEmos = [m.primary_emotion];
         checkMood(m, i, `Turno ${turn}`);
@@ -643,7 +706,8 @@ function newConversation() {
   const c = S.cur;
   if (!c) { toast('Abra ou crie um arquivo primeiro.', 'err'); return; }
   const catalog = c.data.length ? catalogOf(c.data[c.data.length - 1]) : S.defaults.catalog;
-  c.data.push([mk.system(catalog), ...newTurn()]);
+  const lastTools = c.data.length ? toolsOf(c.data[c.data.length - 1]) : [];
+  c.data.push([mk.system(catalog, lastTools.length ? lastTools : S.defaults.tools), ...newTurn()]);
   S.sel = c.data.length - 1; S.filter = ''; $('#filter').value = '';
   touch(); refreshDerived(); renderEditor();
   requestAnimationFrame(() => { const t = $('#msgs .msg-user textarea'); if (t) t.focus(); });
@@ -810,6 +874,19 @@ function branchBar(conv, ui, end, branches, active) {
     const el = $(`#msgs [data-user="${ui}"]`); if (el) el.scrollIntoView({ block: 'nearest' });
     toast('Ramo criado como cópia do que estava na tela. Troque o humor e ajuste a resposta.');
   };
+  const addTool = () => {
+    const name = toolNames(conv)[0] || '';
+    const tool = toolsOf(conv).find(t => t && t.name === name);
+    const args = {};
+    if (tool && tool.parameters && typeof tool.parameters === 'object') for (const k of Object.keys(tool.parameters)) args[k] = '';
+    const call = mk.toolCall(name, args), result = mk.toolResult(name, {});
+    editing.add(call); editing.add(result);
+    let at = conv.findIndex((x, j) => j > ui && j < end && (x.role === 'mood' || x.role === 'answer'));
+    if (at < 0) at = end;
+    conv.splice(at, 0, call, result);
+    touch(); refreshDerived(); renderEditor();
+    if (!name) toast('Esta conversa não tem tools listadas: adicione no system primeiro.', 'err');
+  };
   const promote = () => {
     const br = conv[branches[active - 1]];
     if (pm < 0 || pa < 0) { toast('O turno precisa ter humor e resposta principais para trocar.', 'err'); return; }
@@ -827,9 +904,10 @@ function branchBar(conv, ui, end, branches, active) {
     touch(); refreshDerived(); renderEditor();
   };
   return h('div', { class: 'branchbar', 'data-user': String(ui) },
-    h('span', { class: 'bl' }, options.length > 1 ? 'Respostas para este turno' : 'Ramos'),
+    h('span', { class: 'bl' }, options.length > 1 ? 'Respostas para este turno' : 'Turno'),
     h('div', { class: 'bchips', role: 'tablist', 'aria-label': 'Ramos deste turno' }, chips),
     btn('+ Ramo', addBranch),
+    btn('+ Tool call', addTool),
     active > 0 ? btn('Tornar principal', promote) : null,
     active > 0 ? btn('Excluir ramo', del) : null);
 }
@@ -840,18 +918,20 @@ function msgBlock(conv, i, m, opts = {}) {
     [conv[i], conv[j]] = [conv[j], conv[i]];
     touch(); refreshDerived(); renderEditor();
   };
-  const editable = m.role === 'answer' || m.role === 'mood';
+  const editable = ['answer', 'mood', 'tool_call', 'tool_result'].includes(m.role);
   const isEdit = editable && editing.has(m);
   let body;
   if (m.role === 'answer') body = isEdit ? answerEditor(conv, m) : bubbleView(m, false);
   else if (m.role === 'mood') body = isEdit ? moodEditor(conv, m) : moodView(m);
+  else if (m.role === 'tool_call') body = isEdit ? toolCallEditor(conv, m) : toolCallView(m);
+  else if (m.role === 'tool_result') body = isEdit ? toolResultEditor(conv, m) : toolResultView(m);
   else body = ({ system: systemEditor, memory: memoryEditor, user: userEditor }[m.role] || rawEditor)(conv, m);
   const inBranch = !!opts.branch;
   const el = h('section', { class: 'msg msg-' + (ROLE_LABEL[m.role] ? m.role : 'other') + (isEdit ? ' editing' : '') + (inBranch ? ' in-branch' : ''), 'data-i': String(i) },
-    m.role === 'answer' ? h('span', { class: 'avatar', 'aria-hidden': 'true' }, 'L') : m.role === 'mood' ? h('span', { class: 'avatar ghost', 'aria-hidden': 'true' }) : null,
+    m.role === 'answer' ? h('span', { class: 'avatar', 'aria-hidden': 'true' }, 'L') : (m.role === 'mood' || m.role === 'tool_call') ? h('span', { class: 'avatar ghost', 'aria-hidden': 'true' }) : null,
     h('div', { class: 'bubble' },
       h('div', { class: 'msg-h' },
-        h('h3', null, (m.role === 'mood' ? 'Humor da Lisa' : m.role === 'answer' ? 'Lisa' : ROLE_LABEL[m.role] || `Papel "${m.role}"`) + (opts.tag ? ` · ${opts.tag}` : '')),
+        h('h3', null, (m.role === 'mood' ? 'Humor da Lisa' : m.role === 'answer' ? 'Lisa' : m.role === 'tool_call' ? 'Lisa chama uma tool' : m.role === 'tool_result' ? 'Resultado da tool' : ROLE_LABEL[m.role] || `Papel "${m.role}"`) + (opts.tag ? ` · ${opts.tag}` : '')),
         h('div', { class: 'msg-tools' },
           editable ? iconBtn(isEdit ? 'check' : 'edit', isEdit ? 'Concluir edição' : 'Editar', () => {
             if (isEdit) editing.delete(m); else editing.add(m);
@@ -884,6 +964,9 @@ function addBar(conv) {
 
 /* sistema: catálogo */
 function systemEditor(conv, m) {
+  return h('div', null, catalogFold(conv, m), toolsFold(conv, m));
+}
+function catalogFold(conv, m) {
   const n = Array.isArray(m.animation_catalog) ? m.animation_catalog.length : 0;
   const key = 'cat:' + S.sel;
   const d = h('details', { class: 'fold', ontoggle: () => { d.open ? S.ui.open.add(key) : S.ui.open.delete(key); } },
@@ -905,6 +988,55 @@ function systemEditor(conv, m) {
     }));
   d.open = S.ui.open.has(key);
   return d;
+}
+function toolsFold(conv, m) {
+  const n = Array.isArray(m.tools) ? m.tools.length : 0;
+  const key = 'tools:' + S.sel;
+  const d = h('details', { class: 'fold', ontoggle: () => { d.open ? S.ui.open.add(key) : S.ui.open.delete(key); } },
+    h('summary', null, `Tools disponíveis (${n})`),
+    toolsEditor(m, {
+      onChange: structural => { touch(); refreshDerived(); if (structural) renderEditor(); },
+      applyAll: async () => {
+        const others = S.cur.data.length - 1;
+        if (!others) { toast('Só há uma conversa neste arquivo.'); return; }
+        if (!await askConfirm(`Substituir as tools das outras ${others} conversas de ${S.cur.name}.json por estas?`, { ok: 'Substituir', danger: true })) return;
+        S.cur.data.forEach(cv => {
+          if (cv === conv) return;
+          const sys = cv.find(x => x.role === 'system');
+          if (sys) sys.tools = clone(m.tools || []); else cv.unshift(mk.system([], m.tools || []));
+        });
+        touch(); refreshDerived(); renderEditor();
+        toast('Tools aplicadas.');
+      },
+    }));
+  d.open = S.ui.open.has(key);
+  return d;
+}
+function toolsEditor(sys, opt) {
+  const wrap = h('div');
+  const draw = () => {
+    const tools = Array.isArray(sys.tools) ? sys.tools : [];
+    wrap.replaceChildren(...[
+      !tools.length ? h('p', { class: 'muted small' }, 'Nenhuma tool listada: o modelo não saberá que pode consultar a memória.') : null,
+      ...tools.map((t, i) => h('div', { class: 'tool-ed' },
+        h('div', { class: 'tool-row' },
+          h('input', { type: 'text', class: 'code', 'aria-label': 'Nome da tool', placeholder: 'nome_da_tool', value: t.name ?? '', oninput: e => { t.name = e.target.value; opt.onChange(false); } }),
+          h('input', { type: 'text', 'aria-label': 'Descrição da tool', placeholder: 'Descrição', value: t.description ?? '', oninput: e => { t.description = e.target.value; opt.onChange(false); } }),
+          iconBtn('x', 'Remover tool', () => { forgetDrafts(t); tools.splice(i, 1); opt.onChange(true); draw(); })),
+        h('div', { class: 'field' }, h('span', null, 'parameters (JSON: nome do parâmetro → tipo)'), jsonArea(t, 'parameters')))),
+      h('div', { class: 'row' },
+        btn('Adicionar tool', () => { (sys.tools || (sys.tools = [])).push(mk.tool()); opt.onChange(true); draw(); }),
+        btn('Adicionar tools de memória', () => {
+          const have = new Set((sys.tools || []).map(t => t && t.name));
+          const add = S.defaults.tools.filter(t => !have.has(t.name));
+          if (!add.length) { toast('As tools padrão já estão na lista.'); return; }
+          (sys.tools || (sys.tools = [])).push(...clone(add)); opt.onChange(true); draw();
+        }),
+        opt.applyAll ? btn('Aplicar a todas as conversas', opt.applyAll) : null)
+    ].filter(Boolean));
+  };
+  draw();
+  return wrap;
 }
 function catalogEditor(sys, opt) {
   if (!Array.isArray(sys.animation_catalog)) sys.animation_catalog = [];
@@ -936,6 +1068,30 @@ function memoryEditor(conv, m) {
     h('label', { class: 'field' }, h('span', null, 'Resumo (summary)'),
       h('textarea', { value: m.summary ?? '', oninput: e => { m.summary = e.target.value; touch(); } })),
     h('div', { class: 'field' }, h('span', null, 'key_facts (JSON)'), jsonArea(m, 'key_facts')));
+}
+function toolSelect(conv, m) {
+  const names = toolNames(conv);
+  const sel = h('select', { 'aria-label': 'Tool', onchange: () => { m.name = sel.value; touch(); refreshDerived(); } });
+  const opts = names.map(n => h('option', { value: n }, n));
+  if (!names.includes(m.name)) opts.unshift(h('option', { value: m.name ?? '' }, m.name ? `${m.name} (fora da lista)` : '(escolha a tool)'));
+  sel.replaceChildren(...opts); sel.value = m.name ?? '';
+  return sel;
+}
+function toolCallEditor(conv, m) {
+  return h('div', null,
+    h('label', { class: 'field' }, h('span', null, 'Tool'), toolSelect(conv, m)),
+    h('div', { class: 'field' }, h('span', null, 'arguments (JSON)'), jsonArea(m, 'arguments')));
+}
+function toolResultEditor(conv, m) {
+  return h('div', null,
+    h('label', { class: 'field' }, h('span', null, 'Tool'), toolSelect(conv, m)),
+    h('div', { class: 'field' }, h('span', null, 'content (JSON: o que a tool devolveu)'), jsonArea(m, 'content')));
+}
+function toolCallView(m) {
+  return h('div', { class: 'tcall' }, h('code', { class: 'tname' }, m.name || '?'), h('code', { class: 'targs' }, JSON.stringify(m.arguments) ?? ''));
+}
+function toolResultView(m) {
+  return h('pre', { class: 'tres' }, JSON.stringify(m.content, null, 2) ?? '(sem content)');
 }
 function userEditor(conv, m) {
   return h('textarea', { 'aria-label': 'Texto do usuário', placeholder: 'Mensagem do usuário…', value: m.text ?? '', oninput: e => { m.text = e.target.value; touch(); } });
@@ -1165,7 +1321,7 @@ function buildChatSide() {
 }
 function ensureChatContext() {
   const c = S.chat;
-  if (!c.catalog) c.catalog = mk.system(S.defaults.catalog);
+  if (!c.catalog) c.catalog = mk.system(S.defaults.catalog, S.defaults.tools);
   if (!c.memory) c.memory = mk.memory();
   if (!$('#chat-cat').firstChild) {
     $('#chat-cat').replaceChildren(h('details', { class: 'fold' },
@@ -1175,10 +1331,12 @@ function ensureChatContext() {
         const conv = S.cur && S.cur.data[S.sel];
         const cat = conv ? catalogOf(conv) : [];
         if (!cat.length) { toast('Nenhum catálogo no dataset aberto.', 'err'); return; }
-        c.catalog = mk.system(cat);
+        const tl = toolsOf(conv);
+        c.catalog = mk.system(cat, tl.length ? tl : undefined);
         $('#chat-cat').replaceChildren(); ensureChatContext();
-        toast('Catálogo copiado.');
-      })));
+        toast('Catálogo e tools copiados.');
+      })),
+      h('details', { class: 'fold' }, h('summary', null, 'Tools disponíveis'), toolsEditor(c.catalog, { onChange: () => {}, applyAll: null })));
   }
   if (!$('#mem-box').firstChild) $('#mem-box').replaceChildren(memoryEditorChat(c.memory));
 }
@@ -1234,9 +1392,11 @@ function updateComposer() {
   const ready = S.model.state === 'ready';
   const ta = $('#input'), send = $('#send');
   if (!ta) return;
-  ta.disabled = !ready || S.chat.busy;
-  send.disabled = !ready || S.chat.busy;
+  const wait = waitingForTool();
+  ta.disabled = !ready || S.chat.busy || wait;
+  send.disabled = !ready || S.chat.busy || wait;
   if (!ready) ta.placeholder = 'Carregue o modelo (painel à esquerda) para conversar.';
+  else if (wait) ta.placeholder = 'A Lisa pediu uma tool: responda no cartão acima.';
   else ta.placeholder = 'Escreva como o usuário. Enter envia, Shift+Enter quebra a linha.';
   send.textContent = S.chat.busy ? 'Gerando…' : 'Enviar';
 }
@@ -1261,30 +1421,68 @@ function buildContext() {
 async function sendMessage() {
   const ta = $('#input');
   const text = ta.value.trim();
-  if (!text || S.chat.busy || S.model.state !== 'ready') return;
-  const context = buildContext();
-  context.push({ role: 'user', text });
-  const turn = { user: text, status: 'pending' };
-  S.chat.turns.push(turn); S.chat.busy = true; ta.value = '';
+  if (!text || S.chat.busy || S.model.state !== 'ready' || waitingForTool()) return;
+  const turn = { user: text, status: 'pending', tools: [] };
+  S.chat.turns.push(turn); ta.value = '';
+  await runStep(turn);
+}
+const waitingForTool = () => { const t = S.chat.turns[S.chat.turns.length - 1]; return !!t && t.status === 'tool'; };
+async function runStep(turn) {
+  S.chat.busy = true; turn.status = 'pending'; turn.pending = null;
   renderTranscript(); updateComposer();
   try {
+    const context = [...buildContext(), { role: 'user', text: turn.user }, ...turn.tools];
     const r = await api('POST', '/api/chat', { context, max_new_tokens: S.chat.maxTokens });
-    Object.assign(turn, {
-      status: r.answer ? 'ok' : 'partial', raw: r.raw, mood: r.mood, answer: r.answer,
-      junk: r.junk, extra: r.extra, stoppedAt: r.stopped_at, prompt: r.prompt, seconds: r.seconds, fresh: true,
-    });
+    const calls = r.tool_calls || [];
+    if (calls.length && !r.answer) {
+      if (turn.tools.filter(m => m.role === 'tool_call').length >= 6) { turn.status = 'error'; turn.error = 'O modelo pediu tools demais em sequência; parei por aqui.'; }
+      else { turn.status = 'tool'; turn.pending = calls.map(call => ({ call, text: '{"found": false}' })); turn.raw = r.raw; turn.prompt = r.prompt; }
+    } else {
+      Object.assign(turn, {
+        status: r.answer ? 'ok' : 'partial', raw: r.raw, mood: r.mood, answer: r.answer,
+        junk: r.junk, extra: r.extra, stoppedAt: r.stopped_at, prompt: r.prompt, seconds: r.seconds, fresh: true,
+      });
+    }
   } catch (e) { turn.status = 'error'; turn.error = e.message; }
   S.chat.busy = false;
   renderTranscript(); updateComposer();
-  if (S.mode === 'chat') $('#input').focus();
+  if (S.mode === 'chat' && turn.status !== 'tool') $('#input').focus();
+}
+function submitResults(turn) {
+  const msgs = [];
+  for (const p of turn.pending) {
+    let content;
+    try { content = JSON.parse(p.text); } catch (e) { toast(`Resultado de ${p.call.name}: JSON inválido (${e.message})`, 'err'); return; }
+    msgs.push(p.call, { role: 'tool_result', name: p.call.name, content });
+  }
+  turn.tools.push(...msgs);
+  runStep(turn);
+}
+function cancelTurn(turn) {
+  S.chat.turns = S.chat.turns.filter(t => t !== turn);
+  $('#input').value = turn.user;
+  renderTranscript(); updateComposer();
 }
 function retryLast() {
   const last = S.chat.turns[S.chat.turns.length - 1];
-  if (!last || S.chat.busy) return;
+  if (!last || S.chat.busy || last.status === 'tool') return;
   S.chat.turns.pop();
   $('#input').value = last.user;
   renderTranscript();
   sendMessage();
+}
+function exchangeViews(t) {
+  const out = [];
+  const list = t.tools || [];
+  for (let k = 0; k < list.length; k += 2) {
+    out.push(h('div', { class: 'tx' }, toolCallView(list[k]), list[k + 1] ? toolResultView(list[k + 1]) : null));
+  }
+  return out;
+}
+function pendingView(p) {
+  const ta = h('textarea', { class: 'code', spellcheck: 'false', 'aria-label': `Resultado de ${p.call.name}`, value: p.text, oninput: e => { p.text = e.target.value; } });
+  return h('div', { class: 'tx' }, toolCallView(p.call),
+    h('p', { class: 'small muted', style: 'margin-top:6px' }, 'Resultado da tool (JSON). Você faz o papel do sistema de memória:'), ta);
 }
 function renderTranscript() {
   const box = $('#transcript');
@@ -1297,7 +1495,9 @@ function renderTranscript() {
     const user = h('div', { class: 'msg msg-user' }, h('div', { class: 'bubble' }, h('span', { class: 'say', style: 'white-space:pre-wrap' }, t.user)));
     const lisa = (...kids) => h('div', { class: 'msg msg-answer' }, h('span', { class: 'avatar', 'aria-hidden': 'true' }, 'L'), h('div', { class: 'bubble reply' }, ...kids));
     let reply;
-    if (t.status === 'pending') reply = lisa(h('p', { class: 'muted' }, 'Gerando…'));
+    if (t.status === 'pending') reply = lisa(...exchangeViews(t), h('p', { class: 'muted' }, 'Gerando…'));
+    else if (t.status === 'tool') reply = lisa(...exchangeViews(t), ...(t.pending || []).map(p => pendingView(p)),
+      h('div', { class: 'reply-tools' }, btn('Enviar resultado', () => submitResults(t), 'primary'), btn('Cancelar turno', () => cancelTurn(t))));
     else if (t.status === 'error') reply = lisa(h('p', { class: 'err-text' }, t.error));
     else {
       const notes = [];
@@ -1306,6 +1506,7 @@ function renderTranscript() {
       if (t.stoppedAt) notes.push(`A saída foi cortada onde o modelo começou a inventar uma mensagem "${t.stoppedAt}".`);
       if (t.junk && t.junk.length) notes.push('Parte da saída não era JSON válido (veja a saída bruta).');
       reply = lisa(
+        ...exchangeViews(t),
         t.mood ? moodView(t.mood) : null,
         t.answer ? bubbleView(t.answer, t.fresh) : null,
         ...notes.map(n => h('p', { class: 'note' }, n)),
@@ -1335,6 +1536,7 @@ async function sendToEditor() {
   if (S.chat.memoryOn) conv.push(clone(S.chat.memory));
   for (const t of turns) {
     conv.push({ role: 'user', text: t.user });
+    for (const m of t.tools || []) conv.push(clone(m));
     if (t.mood) conv.push(clone(t.mood));
     conv.push(clone(t.answer));
   }

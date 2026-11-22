@@ -1,5 +1,6 @@
-import torch
 import json
+
+import torch
 
 from transformers import (
     AutoTokenizer,
@@ -8,6 +9,8 @@ from transformers import (
 )
 
 from peft import PeftModel
+
+from prompting import render_prompt
 
 
 class LisaInference:
@@ -37,17 +40,9 @@ class LisaInference:
 
     def generate(self, context: list[dict], max_new_tokens: int = 256) -> str:
 
-        # Igual ao prompt dos exemplos de treino (convert_dataset.py):
-        # - sem as mensagens 'mood' (só o turno atual gera um mood) nem 'branch'
-        #   (respostas alternativas do dataset, que não fazem parte do contexto);
-        # - terminando em "\n", para que a fronteira entre o prompt e o que o
-        #   modelo gera caia entre dois tokens, como no treino.
-        context = [item for item in context if item.get("role") not in ("mood", "branch")]
-
-        prompt = "\n".join(
-            json.dumps(item, ensure_ascii=False)
-            for item in context
-        ) + "\n"
+        # Igual ao prompt dos exemplos de treino (ver prompting.py): sem mood/branch,
+        # sem tool_call/tool_result de turnos passados, terminando em "\n".
+        prompt = render_prompt(context)
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
@@ -66,6 +61,48 @@ class LisaInference:
             inputs["input_ids"].shape[1]:
         ]
         return self.tokenizer.decode(generated, skip_special_tokens=True)
+
+
+    def respond(self, context: list[dict], tool_handler, max_new_tokens: int = 256, max_steps: int = 4) -> list[dict]:
+        """
+        Gera a resposta de um turno, executando tools no caminho.
+
+        `tool_handler(tool_call: dict) -> object` recebe a mensagem tool_call do
+        modelo (`name`, `arguments`) e devolve o conteúdo do tool_result (qualquer
+        valor JSON, por exemplo {"found": false}). Retorna as mensagens geradas,
+        na ordem: tool_calls (se houve), mood e answer. As tool_result também
+        entram na lista, para você poder guardar o turno completo.
+        """
+        context = list(context)
+        produced = []
+        decoder = json.JSONDecoder()
+
+        for _ in range(max_steps):
+            text = self.generate(context, max_new_tokens)
+            messages, pos = [], 0
+            while True:
+                start = text.find("{", pos)
+                if start == -1:
+                    break
+                try:
+                    obj, pos = decoder.raw_decode(text, start)
+                except ValueError:
+                    break
+                if not isinstance(obj, dict) or obj.get("role") in ("user", "system", "tool_result"):
+                    break  # o modelo começou a inventar o que não é dele
+                messages.append(obj)
+
+            calls = [m for m in messages if m.get("role") == "tool_call"]
+            final = [m for m in messages if m.get("role") in ("mood", "answer")]
+            if not calls or final:
+                return produced + final
+
+            for call in calls:
+                result = {"role": "tool_result", "name": call.get("name"), "content": tool_handler(call)}
+                context += [call, result]
+                produced += [call, result]
+
+        raise RuntimeError(f"O modelo pediu tools por mais de {max_steps} passos seguidos.")
 
 
 def main():

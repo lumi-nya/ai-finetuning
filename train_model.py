@@ -24,7 +24,7 @@ MODEL_NAME = "Qwen/Qwen3-1.7B-Base"
 # Cada exemplo é um turno: prompt (system + histórico + user) e completion
 # (mood + answer). Se prompt + completion passar disso, o fim é cortado, e o fim
 # é justamente o mood/answer que o modelo precisa aprender.
-MAX_LENGTH = 1024
+MAX_LENGTH = 1536
 
 # Quantização de 4 bits
 quantization_config = BitsAndBytesConfig(
