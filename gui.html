@@ -204,6 +204,7 @@ dialog::backdrop { background: rgba(20, 28, 50, .5); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.delta-ed{margin-top:14px}.delta-ed input[type=number]{width:100%}.mood.delta{margin-top:6px}.mood.delta .up{color:var(--teal)}.mood.delta .down{color:var(--red)}
 </style>
 </head>
 <body>
@@ -340,7 +341,8 @@ const mk = {
   memory: () => ({ role: 'memory', summary: '', key_facts: {} }),
   user: (text = '') => ({ role: 'user', text }),
   mood: () => ({ role: 'mood', primary_emotion: '', shyness_level: 5, comfort_level: 5, distraction_level: 3, energy_level: 5 }),
-  answer: () => ({ role: 'answer', agent_id: S.defaults.agent_id || 'Lisa', timeline: [mk.speech()] }),
+  answer: () => ({ role: 'answer', agent_id: S.defaults.agent_id || 'Lisa', timeline: [mk.speech()], mood_delta: mk.delta() }),
+  delta: () => ({ primary_emotion: '', shyness_level: 0, comfort_level: 0, distraction_level: 0, energy_level: 0 }),
   speech: (text = '') => ({ event_role: 'speech', text }),
   action: (id = '', w = 0.8) => ({ event_role: 'action', animation_id: id, blend_weight: w }),
   anim: () => ({ id: '', description: '', category: 'idle', layer: 'body', tags: [] }),
@@ -409,6 +411,15 @@ function validateConv(conv) {
         if (!turn) add('warn', 'Resposta antes de qualquer mensagem do usuário.', i);
         else if (!hasMood) add('warn', `Turno ${turn}: resposta sem 'mood' antes dela.`, i);
         if (typeof m.agent_id !== 'string' || !m.agent_id.trim()) add('warn', `Turno ${turn}: agent_id vazio.`, i);
+        {
+          const d = m.mood_delta;
+          if (d === undefined) add('warn', `Turno ${turn}: falta o 'mood_delta' na resposta (o treino ficaria inconsistente).`, i);
+          else if (!d || typeof d !== 'object' || Array.isArray(d)) add('warn', `Turno ${turn}: mood_delta precisa ser um objeto.`, i);
+          else {
+            if (typeof d.primary_emotion !== 'string' || !d.primary_emotion.trim()) add('warn', `Turno ${turn}: mood_delta sem primary_emotion.`, i);
+            for (const [k] of LEVELS) if (!Number.isInteger(d[k]) || d[k] < -10 || d[k] > 10) add('warn', `Turno ${turn}: mood_delta.${k} deveria ser um inteiro de -10 a 10.`, i);
+          }
+        }
         if (!Array.isArray(m.timeline) || !m.timeline.length) { add('warn', `Turno ${turn}: timeline vazia.`, i); break; }
         m.timeline.forEach((ev, k) => {
           const where = `Turno ${turn}, evento ${k + 1}`;
@@ -770,7 +781,28 @@ function answerEditor(conv, m) {
   return h('div', null,
     h('label', { class: 'field' }, h('span', null, 'Agente (agent_id)'),
       h('input', { type: 'text', value: m.agent_id ?? '', oninput: e => { m.agent_id = e.target.value; touch(); } })),
-    timelineEditor(conv, m));
+    timelineEditor(conv, m),
+    deltaEditor(m));
+}
+function deltaEditor(m) {
+  const box = h('div', { class: 'delta-ed' });
+  const draw = () => {
+    const d = m.mood_delta;
+    if (!d || typeof d !== 'object' || Array.isArray(d)) {
+      box.replaceChildren(h('p', { class: 'muted small' }, d === undefined ? 'Esta resposta não tem mood_delta.' : 'mood_delta não é um objeto.'),
+        btn('Adicionar mood_delta', () => { m.mood_delta = mk.delta(); touch(); refreshDerived(); draw(); }));
+      return;
+    }
+    box.replaceChildren(
+      h('h4', { class: 'side-h' }, 'Variação de humor (mood_delta)'),
+      h('label', { class: 'field' }, h('span', null, 'Emoção resultante'),
+        h('input', { type: 'text', list: 'dl-emo', value: d.primary_emotion ?? '', oninput: e => { d.primary_emotion = e.target.value; touch(); refreshDerived(); } })),
+      h('div', { class: 'lvls' }, LEVELS.map(([k, label]) => h('label', { class: 'lvl' }, h('span', null, label),
+        h('input', { type: 'number', min: -10, max: 10, step: 1, value: d[k] ?? 0, 'aria-label': `Variação de ${label}`,
+          oninput: e => { const v = e.target.value; d[k] = v === '' ? null : parseInt(v, 10); touch(); refreshDerived(); } })))));
+  };
+  draw();
+  return box;
 }
 
 /* campos JSON com rascunho enquanto inválidos */
@@ -895,6 +927,13 @@ function timelineView(events, fresh) {
     if (ev && ev.event_role === 'speech') return h('div', { class: 'ev ev-speech', style }, h('span', { class: 'mark' }), h('p', { class: 'say' }, ev.text ?? ''));
     return h('div', { class: 'ev ev-other', style }, h('span', { class: 'mark' }), h('code', null, JSON.stringify(ev)));
   }));
+}
+const sgn = n => (Number.isInteger(n) ? (n > 0 ? '+' + n : String(n)) : '?');
+function deltaView(d) {
+  if (!d || typeof d !== 'object') return null;
+  return h('div', { class: 'mood delta' }, h('span', { class: 'emo' }, `→ ${d.primary_emotion || '—'}`),
+    LEVELS.map(([k, label]) => h('span', { class: 'lv', title: `${k}: ${sgn(d[k])}` }, h('span', null, label),
+      h('b', { class: Number(d[k]) > 0 ? 'up' : Number(d[k]) < 0 ? 'down' : '' }, sgn(d[k])))));
 }
 function moodView(m) {
   return h('div', { class: 'mood' }, h('span', { class: 'emo' }, m.primary_emotion ?? '—'),
@@ -1068,12 +1107,14 @@ function renderTranscript() {
       const notes = [];
       if (!t.answer) notes.push('O modelo não gerou um objeto "answer" válido. Este turno não entra no contexto das próximas mensagens.');
       if (!t.mood) notes.push('O modelo não gerou "mood".');
+      if (t.answer && !t.answer.mood_delta) notes.push('A resposta veio sem "mood_delta".');
       if (t.stoppedAt) notes.push(`A saída foi cortada onde o modelo começou a inventar uma mensagem "${t.stoppedAt}".`);
       if (t.junk && t.junk.length) notes.push('Parte da saída não era JSON válido (veja a saída bruta).');
       reply = h('div', { class: 'reply' },
         h('span', { class: 'who' }, 'Lisa'),
         t.mood ? moodView(t.mood) : null,
         t.answer ? timelineView(t.answer.timeline, t.fresh) : null,
+        t.answer ? deltaView(t.answer.mood_delta) : null,
         ...notes.map(n => h('p', { class: 'note' }, n)),
         h('details', { class: 'raw' }, h('summary', { class: 'small muted' }, `Saída bruta${t.seconds != null ? ` (${t.seconds}s)` : ''}`),
           h('pre', null, t.raw ?? ''),

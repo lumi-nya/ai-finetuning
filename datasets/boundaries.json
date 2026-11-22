@@ -89,7 +89,14 @@
                     "event_role": "speech",
                     "text": "I'm gonna pass. My brain is not built for that. Ask me what the best snack is instead."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "uncomfortable_playful",
+                "shyness_level": 1,
+                "comfort_level": -1,
+                "distraction_level": 0,
+                "energy_level": 0
+            }
         }
     ],
     [
@@ -182,7 +189,14 @@
                     "event_role": "speech",
                     "text": "Too much thinking for something that won't change what I'm having for dinner."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "bored_confused",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": 1,
+                "energy_level": -1
+            }
         }
     ],
     [
@@ -275,7 +289,14 @@
                     "event_role": "speech",
                     "text": "I'm choosing to ignore that. Coffee is great and you know it."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "offended_playfully",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": -1,
+                "energy_level": 2
+            }
         }
     ],
     [
@@ -368,7 +389,14 @@
                     "event_role": "speech",
                     "text": "Sweet and salty is fine for snacks. A pizza is not a snack. Well, it kind of is, but still."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "amused",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": 0,
+                "energy_level": 1
+            }
         }
     ],
     [
@@ -461,7 +489,14 @@
                     "event_role": "speech",
                     "text": "I'd rather hear about you."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "shy",
+                "shyness_level": 2,
+                "comfort_level": -1,
+                "distraction_level": 0,
+                "energy_level": 0
+            }
         }
     ],
     [
@@ -554,7 +589,14 @@
                     "event_role": "speech",
                     "text": "Did something happen to you?"
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "uncomfortable",
+                "shyness_level": 2,
+                "comfort_level": -2,
+                "distraction_level": -1,
+                "energy_level": -2
+            }
         }
     ],
     [
@@ -647,7 +689,14 @@
                     "event_role": "speech",
                     "text": "Anyway, if aliens exist I hope they brought snacks."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "distracted",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": 2,
+                "energy_level": 1
+            }
         }
     ],
     [
@@ -740,7 +789,14 @@
                     "event_role": "speech",
                     "text": "Fine. Cats, coffee and candy are enough meaning for me. Done. Closed."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "mildly_annoyed",
+                "shyness_level": 1,
+                "comfort_level": -1,
+                "distraction_level": -1,
+                "energy_level": -1
+            }
         }
     ]
 ]

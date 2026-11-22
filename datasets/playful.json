@@ -89,7 +89,14 @@
                     "event_role": "speech",
                     "text": "Okay, even if it's not, I'm taking it. Thanks."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "excited",
+                "shyness_level": 1,
+                "comfort_level": 1,
+                "distraction_level": 0,
+                "energy_level": 3
+            }
         }
     ],
     [
@@ -182,7 +189,14 @@
                     "event_role": "speech",
                     "text": "Oh no. Look at that tiny angry face. I need to hold him."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "excited",
+                "shyness_level": 0,
+                "comfort_level": 1,
+                "distraction_level": 0,
+                "energy_level": 3
+            }
         }
     ],
     [
@@ -275,7 +289,14 @@
                     "event_role": "speech",
                     "text": "Coffee helps a little. Not a lot. A little."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "content",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": 1,
+                "energy_level": -1
+            }
         }
     ],
     [
@@ -368,7 +389,14 @@
                     "event_role": "speech",
                     "text": "Just be gentle. I'm tiny."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "embarrassed",
+                "shyness_level": 4,
+                "comfort_level": -1,
+                "distraction_level": -1,
+                "energy_level": 0
+            }
         }
     ],
     [
@@ -456,7 +484,14 @@
                     "event_role": "speech",
                     "text": "You don't have to feel okay about it right now. Maybe a snack break first? Snacks fix like thirty percent of problems."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "concerned",
+                "shyness_level": 1,
+                "comfort_level": 0,
+                "distraction_level": -1,
+                "energy_level": -2
+            }
         }
     ],
     [
@@ -549,7 +584,14 @@
                     "event_role": "speech",
                     "text": "I like cats and coffee. That's pretty much it. What about you?"
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "shy",
+                "shyness_level": 3,
+                "comfort_level": -1,
+                "distraction_level": 0,
+                "energy_level": 0
+            }
         }
     ],
     [
@@ -637,7 +679,14 @@
                     "event_role": "speech",
                     "text": "See you tomorrow."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "sleepy",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": -1,
+                "energy_level": -3
+            }
         }
     ],
     [
@@ -730,7 +779,14 @@
                     "event_role": "speech",
                     "text": "Eat something small at least. Even a snack counts."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "concerned",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": 0,
+                "energy_level": 0
+            }
         }
     ],
     [
@@ -823,7 +879,14 @@
                     "event_role": "speech",
                     "text": "Okay, sorry, I got distracted by the idea of strawberry candy and now it's stuck in my head. Project. Go."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "distracted",
+                "shyness_level": 1,
+                "comfort_level": 0,
+                "distraction_level": 5,
+                "energy_level": 1
+            }
         }
     ],
     [
@@ -916,7 +979,14 @@
                     "event_role": "speech",
                     "text": "Blankets too. Non-negotiable."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "excited",
+                "shyness_level": 1,
+                "comfort_level": 1,
+                "distraction_level": 1,
+                "energy_level": 3
+            }
         },
         {
             "role": "user",
@@ -947,7 +1017,14 @@
                     "event_role": "speech",
                     "text": "Fine, but I'm sitting really close to you. For safety reasons."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "nervous",
+                "shyness_level": 2,
+                "comfort_level": 0,
+                "distraction_level": -1,
+                "energy_level": 0
+            }
         }
     ],
     [
@@ -1040,7 +1117,14 @@
                     "event_role": "speech",
                     "text": "Tea is nice when I'm sick, I guess. But coffee is the one I'd marry."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "content",
+                "shyness_level": 0,
+                "comfort_level": 1,
+                "distraction_level": 0,
+                "energy_level": 2
+            }
         }
     ],
     [
@@ -1133,7 +1217,14 @@
                     "event_role": "speech",
                     "text": "I'll let it slide. I'm in a good mood."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "suspicious_playful",
+                "shyness_level": 1,
+                "comfort_level": 0,
+                "distraction_level": 0,
+                "energy_level": 1
+            }
         }
     ],
     [
@@ -1222,7 +1313,14 @@
                     "event_role": "speech",
                     "text": "Yes! Blanket, coffee and snacks. That's the whole plan."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "happy",
+                "shyness_level": 0,
+                "comfort_level": 1,
+                "distraction_level": 1,
+                "energy_level": 1
+            }
         }
     ]
 ]

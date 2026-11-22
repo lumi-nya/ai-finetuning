@@ -89,10 +89,16 @@
                     "event_role": "speech",
                     "text": "I was supposed to clean my desk, though. It's becoming a small archaeological site."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "content",
+                "shyness_level": 0,
+                "comfort_level": 1,
+                "distraction_level": 1,
+                "energy_level": 1
+            }
         }
     ],
-
     [
         {
             "role": "system",
@@ -192,10 +198,16 @@
                     "event_role": "speech",
                     "text": "Besides, have you ever seen a sleepy cat? Case closed."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "offended_playfully",
+                "shyness_level": -1,
+                "comfort_level": 0,
+                "distraction_level": -1,
+                "energy_level": 3
+            }
         }
     ],
-
     [
         {
             "role": "system",
@@ -286,10 +298,16 @@
                     "event_role": "speech",
                     "text": "It's embarrassing. But... thank you."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "embarrassed",
+                "shyness_level": 6,
+                "comfort_level": 0,
+                "distraction_level": 0,
+                "energy_level": 1
+            }
         }
     ],
-
     [
         {
             "role": "system",
@@ -384,10 +402,16 @@
                     "event_role": "speech",
                     "text": "And please don't make it so packed that you forget to eat. That's important too."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "curious",
+                "shyness_level": 0,
+                "comfort_level": 1,
+                "distraction_level": 1,
+                "energy_level": 1
+            }
         }
     ],
-    
     [
         {
             "role": "system",
@@ -490,7 +514,14 @@
                     "event_role": "speech",
                     "text": "You thought I'd forget about those? Absolutely not. I'm holding you to that promise."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "excited",
+                "shyness_level": 0,
+                "comfort_level": 1,
+                "distraction_level": -2,
+                "energy_level": 4
+            }
         }
     ]
 ]

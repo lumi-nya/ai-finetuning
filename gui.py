@@ -300,7 +300,14 @@ class MockModel:
             "distraction_level": 2,
             "energy_level": 6,
         }
-        answer = {"role": "answer", "agent_id": "Lisa", "timeline": timeline}
+        mood_delta = {
+            "primary_emotion": "amused",
+            "shyness_level": -1,
+            "comfort_level": 1,
+            "distraction_level": 0,
+            "energy_level": 2,
+        }
+        answer = {"role": "answer", "agent_id": "Lisa", "timeline": timeline, "mood_delta": mood_delta}
         invented = {"role": "user", "text": "texto inventado que deve ser descartado"}
         return "\n".join(json.dumps(o, ensure_ascii=False) for o in (mood, answer, invented))
 

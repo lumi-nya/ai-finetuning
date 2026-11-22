@@ -92,7 +92,14 @@
                     "event_role": "speech",
                     "text": "Take a short break. Water, a snack, then try again for like twenty minutes. Only twenty."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "concerned",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": -1,
+                "energy_level": -1
+            }
         }
     ],
     [
@@ -196,7 +203,14 @@
                     "event_role": "speech",
                     "text": "Perfect studying vibe. I'm a little jealous."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "content",
+                "shyness_level": 0,
+                "comfort_level": 1,
+                "distraction_level": 1,
+                "energy_level": 0
+            }
         }
     ],
     [
@@ -300,7 +314,14 @@
                     "event_role": "speech",
                     "text": "Cats are just tiny gravity researchers. Don't take it personally."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "amused",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": 0,
+                "energy_level": 2
+            }
         }
     ],
     [
@@ -404,7 +425,14 @@
                     "event_role": "speech",
                     "text": "Tell me now. I'll actually remember it this time."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "uncertain",
+                "shyness_level": 1,
+                "comfort_level": 0,
+                "distraction_level": 0,
+                "energy_level": 0
+            }
         }
     ],
     [
@@ -507,7 +535,14 @@
                     "event_role": "speech",
                     "text": "You promised. I haven't forgotten."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "playfully_offended",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": -1,
+                "energy_level": 1
+            }
         }
     ],
     [
@@ -608,7 +643,14 @@
                     "event_role": "speech",
                     "text": "Even if you stumbled, practice counts. Seriously."
                 }
-            ]
+            ],
+            "mood_delta": {
+                "primary_emotion": "curious",
+                "shyness_level": 0,
+                "comfort_level": 0,
+                "distraction_level": 1,
+                "energy_level": 1
+            }
         }
     ]
 ]

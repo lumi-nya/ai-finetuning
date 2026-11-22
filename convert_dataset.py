@@ -23,8 +23,8 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
                    linha, terminando em "\\n" (igual ao prompt de inference.py).
                    As mensagens 'mood' ficam de fora: dos turnos anteriores
                    só interessa o que foi dito e feito (user e answer).
-      completion = o que o modelo deve gerar depois (mood + answer), até o
-                   próximo 'user'
+      completion = o que o modelo deve gerar depois (mood + answer, e o answer
+                   termina com 'mood_delta'), até o próximo 'user'
 
     O treino calcula a perda só na completion, então o mood de cada turno é
     aprendido como parte da resposta daquele turno. O prompt termina em "\\n"
@@ -49,6 +49,11 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
         if not reply:
             print(f"[WARN] {label}, turn {turn} ignored: nothing after the user message.")
             continue
+
+        for message in reply:
+            if message.get("role") == "answer" and not isinstance(message.get("mood_delta"), dict):
+                print(f"[WARN] {label}, turn {turn}: answer without 'mood_delta' "
+                      f"(the model would learn inconsistent labels).")
 
         context = [
             message for message in conversation[:start + 1]
