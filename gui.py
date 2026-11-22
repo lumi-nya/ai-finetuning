@@ -261,8 +261,9 @@ def parse_model_output(text):
 
 
 def build_prompt(context):
-    # Mesma serialização do LisaInference.generate (só para exibir na GUI).
-    return "\n".join(json.dumps(item, ensure_ascii=False) for item in context)
+    # Mesma serialização do LisaInference.generate (só para exibir na GUI):
+    # uma mensagem JSON por linha, terminando em "\n".
+    return "\n".join(json.dumps(item, ensure_ascii=False) for item in context) + "\n"
 
 
 # --------------------------------------------------------------------------

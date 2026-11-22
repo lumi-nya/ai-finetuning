@@ -37,10 +37,13 @@ class LisaInference:
 
     def generate(self, context: list[dict], max_new_tokens: int = 256) -> str:
 
+        # Termina em "\n", igual ao prompt dos exemplos de treino
+        # (convert_dataset.py): assim a fronteira entre o prompt e o que o
+        # modelo gera cai entre dois tokens, como no treino.
         prompt = "\n".join(
             json.dumps(item, ensure_ascii=False)
             for item in context
-        )
+        ) + "\n"
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 

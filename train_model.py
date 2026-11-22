@@ -21,8 +21,9 @@ print("VRAM:", torch.cuda.get_device_properties(0).total_memory / 1024**3)
 
 MODEL_NAME = "Qwen/Qwen3-1.7B-Base"
 
-# Cada exemplo é uma conversa inteira (system + turnos). Se passar disso, o
-# fim é cortado, e o fim é justamente o mood/answer que o modelo precisa aprender.
+# Cada exemplo é um turno: prompt (system + histórico + user) e completion
+# (mood + answer). Se prompt + completion passar disso, o fim é cortado, e o fim
+# é justamente o mood/answer que o modelo precisa aprender.
 MAX_LENGTH = 1024
 
 # Quantização de 4 bits
@@ -100,16 +101,38 @@ for file in dataset_files:
     datasets.append(current)
 
 dataset = concatenate_datasets(datasets)
-dataset = dataset.filter(lambda ex: isinstance(ex.get("text"), str) and ex["text"].strip() != "")
+dataset = dataset.filter(
+    lambda ex: isinstance(ex.get("prompt"), str) and ex["prompt"].strip() != ""
+    and isinstance(ex.get("completion"), str) and ex["completion"].strip() != ""
+)
 dataset = dataset.shuffle(seed=42)
 
-lengths = [len(tokenizer(text)["input_ids"]) for text in dataset["text"]]
+# O TRL calcula a perda só na completion (mood + answer) e anexa o EOS a ela,
+# então o modelo também aprende a parar depois do answer.
+lengths = []
+merged = 0
+
+for ex in dataset:
+    prompt_ids = tokenizer(ex["prompt"])["input_ids"]
+    full_ids = tokenizer(ex["prompt"] + ex["completion"] + tokenizer.eos_token)["input_ids"]
+    lengths.append(len(full_ids))
+    if full_ids[:len(prompt_ids)] != prompt_ids:
+        merged += 1
+
 print(f"Exemplos: {len(lengths)} | tokens por exemplo: máx {max(lengths)}, limite {MAX_LENGTH}")
+
 too_long = sum(1 for n in lengths if n > MAX_LENGTH)
 if too_long:
     raise RuntimeError(
         f"{too_long} exemplo(s) passam de {MAX_LENGTH} tokens e seriam cortados "
-        "(perdendo o mood/answer). Aumente MAX_LENGTH ou encurte as conversas."
+        "(perdendo o mood/answer). Aumente MAX_LENGTH ou encurte os prompts."
+    )
+
+if merged:
+    print(
+        f"AVISO: em {merged} exemplo(s) os tokens se fundem na fronteira prompt/completion. "
+        "O modelo treinaria num contexto diferente do que vê na inferência. "
+        "O prompt deveria terminar em '\\n' (veja convert_dataset.py e inference.py)."
     )
 
 training_config = SFTConfig(
@@ -126,7 +149,8 @@ training_config = SFTConfig(
     gradient_checkpointing=True,
     max_length=MAX_LENGTH,
 
-    dataset_text_field="text",
+    # Dataset prompt/completion: a perda vale só para o mood/answer.
+    completion_only_loss=True,
     packing=False,
 
     logging_steps=10,
@@ -138,11 +162,6 @@ training_config = SFTConfig(
 )
 
 print(dataset.column_names)
-
-bad = [i for i, t in enumerate(dataset["text"]) if not isinstance(t, str) or not t.strip()]
-print(f"{len(bad)} linhas inválidas de {len(dataset)}")
-if bad:
-    print("Exemplo:", dataset[bad[0]])
 
 try:
     trainer = SFTTrainer(

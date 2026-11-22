@@ -5,18 +5,54 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
-# Nome usado pela versão antiga deste script (um arquivo por conversa, uma
+# Nome usado por versões antigas deste script (um arquivo por conversa, uma
 # mensagem por linha). Esses arquivos têm outro formato e precisam sair do
 # caminho, senão o train_model.py mistura os dois.
 LEGACY_PATTERN = "dataset-*.jsonl"
 
 
-def conversation_to_text(conversation: list[dict]) -> str:
-    """Uma mensagem JSON por linha, igual ao prompt montado em inference.py."""
-    return "\n".join(
-        json.dumps(message, ensure_ascii=False)
-        for message in conversation
-    )
+def to_lines(messages: list[dict]) -> list[str]:
+    return [json.dumps(message, ensure_ascii=False) for message in messages]
+
+
+def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]:
+    """
+    Um exemplo de treino por turno, no formato prompt/completion:
+
+      prompt     = tudo até a mensagem 'user' do turno, uma mensagem JSON por
+                   linha, terminando em "\\n" (igual ao prompt de inference.py)
+      completion = o que o modelo deve gerar depois (mood + answer), até o
+                   próximo 'user'
+
+    O treino calcula a perda só na completion. O prompt termina em "\\n" para
+    que a fronteira prompt/completion caia entre dois tokens, do mesmo jeito
+    no treino e na inferência.
+    """
+    user_positions = [
+        i for i, message in enumerate(conversation) if message["role"] == "user"
+    ]
+
+    if not user_positions:
+        print(f"[WARN] {label} ignored: no 'user' message.")
+        return []
+
+    examples = []
+
+    for turn, start in enumerate(user_positions, start=1):
+        is_last = turn == len(user_positions)
+        end = len(conversation) if is_last else user_positions[turn]
+        reply = conversation[start + 1:end]
+
+        if not reply:
+            print(f"[WARN] {label}, turn {turn} ignored: nothing after the user message.")
+            continue
+
+        examples.append({
+            "prompt": "\n".join(to_lines(conversation[:start + 1])) + "\n",
+            "completion": "\n".join(to_lines(reply)),
+        })
+
+    return examples
 
 
 def convert_dataset(input_path: Path, output_dir: Path):
@@ -28,7 +64,8 @@ def convert_dataset(input_path: Path, output_dir: Path):
     if not isinstance(dataset, list):
         raise ValueError(f"{input_path}: the JSON root must be a list.")
 
-    lines = []
+    examples = []
+    used_conversations = 0
 
     for index, conversation in enumerate(dataset, start=1):
         if not isinstance(conversation, list):
@@ -52,14 +89,11 @@ def convert_dataset(input_path: Path, output_dir: Path):
                     f"in context {index} missing role."
                 )
 
-        # Um exemplo de treino por conversa inteira, com o campo "text"
-        # que o train_model.py lê (dataset_text_field="text").
-        lines.append(
-            json.dumps(
-                {"text": conversation_to_text(conversation)},
-                ensure_ascii=False
-            )
-        )
+        converted = conversation_to_examples(conversation, f"Context {index}")
+
+        if converted:
+            used_conversations += 1
+            examples.extend(converted)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -67,10 +101,13 @@ def convert_dataset(input_path: Path, output_dir: Path):
     output_path = output_dir / f"{input_path.stem}.jsonl"
 
     with output_path.open("w", encoding="utf-8") as output:
-        for line in lines:
-            output.write(line + "\n")
+        for example in examples:
+            output.write(json.dumps(example, ensure_ascii=False) + "\n")
 
-    print(f"  -> {output_path} ({len(lines)} conversations)")
+    print(
+        f"  -> {output_path} "
+        f"({len(examples)} examples from {used_conversations} conversations)"
+    )
     print(f"Finished: {input_path}\n")
 
 
