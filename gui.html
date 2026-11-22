@@ -131,6 +131,14 @@ textarea.code { min-height: 5em; }
 .gem { width: 7px; height: 7px; background: currentColor; transform: rotate(45deg); border-radius: 1px; }
 .bview .say { margin: 3px 0; }
 .bview .mood.delta { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.branchbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 2px 0 2px 38px; font-size: 13px; }
+.branchbar .bl { color: var(--muted); }
+.bchips { display: flex; flex-wrap: wrap; gap: 4px; }
+.bchip { display: inline-flex; gap: 6px; align-items: baseline; background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 1px 10px; cursor: pointer; font-size: 13px; }
+.bchip b { color: var(--muted); font-variant-numeric: tabular-nums; }
+.bchip[aria-selected="true"] { background: var(--blue-soft); border-color: var(--blue); font-weight: 600; }
+.branchbar .btn { padding: 1px 10px; font-size: 13px; }
+.msg.in-branch .bubble { box-shadow: -3px 0 0 var(--blue); }
 .reveal .say, .reveal .chip { animation: cue .45s ease-out both; animation-delay: calc(var(--i) * 110ms); }
 .flash .bubble { animation: flash 1.2s ease-out; }
 @keyframes flash { 50% { box-shadow: 0 0 0 4px var(--blue-soft); } }
@@ -354,7 +362,8 @@ const S = {
 const editing = new WeakSet(); // mood/answer abertos para edição
 const drafts = new Map(); // objeto -> {chave: {text, error}}  (JSON ainda inválido)
 
-const ROLE_LABEL = { system: 'Sistema', memory: 'Memória', user: 'Usuário', mood: 'Humor', answer: 'Resposta' };
+const ROLE_LABEL = { system: 'Sistema', memory: 'Memória', user: 'Usuário', mood: 'Humor', answer: 'Resposta', branch: 'Ramo' };
+const branchSel = new WeakMap(); // mensagem 'user' -> ramo exibido (0 = principal)
 const LEVELS = [['shyness_level', 'Timidez'], ['comfort_level', 'Conforto'], ['distraction_level', 'Distração'], ['energy_level', 'Energia']];
 
 // A ordem das chaves é a que o modelo viu no treino; nunca reordene.
@@ -387,7 +396,7 @@ const catalogOf = conv => {
 };
 const catalogIds = conv => catalogOf(conv).map(a => a && a.id).filter(x => typeof x === 'string' && x !== '');
 const firstUser = conv => (conv.find(m => m && m.role === 'user' && typeof m.text === 'string') || {}).text || '';
-const searchText = conv => conv.map(m => [m.text, m.summary, ...(Array.isArray(m.timeline) ? m.timeline.map(e => e && e.text) : [])].filter(Boolean).join(' ')).join(' ').toLowerCase();
+const searchText = conv => conv.map(m => [m.text, m.summary, ...(Array.isArray(m.timeline) ? m.timeline.map(e => e && e.text) : []), ...(m.answer && Array.isArray(m.answer.timeline) ? m.answer.timeline.map(e => e && e.text) : [])].filter(Boolean).join(' ')).join(' ').toLowerCase();
 
 /* ---------------------------------------------------------- validação */
 function validateConv(conv) {
@@ -399,7 +408,34 @@ function validateConv(conv) {
   if (systems.length > 1) add('warn', 'Há mais de uma mensagem system.');
   if (systems.length && conv[0].role !== 'system') add('warn', 'A mensagem system deveria ser a primeira.');
 
-  let turn = 0, hasMood = false, hasAnswer = true, lastUserIdx = -1;
+  let turn = 0, hasMood = false, hasAnswer = true, lastUserIdx = -1, branchCount = 0, turnEmos = [];
+  const checkMood = (m, i, tag) => {
+    if (typeof m.primary_emotion !== 'string' || !m.primary_emotion.trim()) add('warn', `${tag}: primary_emotion vazio.`, i);
+    for (const [k] of LEVELS) {
+      if (!Number.isInteger(m[k]) || m[k] < 0 || m[k] > 10) add('warn', `${tag}: ${k} deveria ser um inteiro de 0 a 10.`, i);
+    }
+  };
+  const checkAnswer = (m, i, tag) => {
+    if (typeof m.agent_id !== 'string' || !m.agent_id.trim()) add('warn', `${tag}: agent_id vazio.`, i);
+    const d = m.mood_delta;
+    if (d === undefined) add('warn', `${tag}: falta o 'mood_delta' na resposta (o treino ficaria inconsistente).`, i);
+    else if (!d || typeof d !== 'object' || Array.isArray(d)) add('warn', `${tag}: mood_delta precisa ser um objeto.`, i);
+    else {
+      if (typeof d.primary_emotion !== 'string' || !d.primary_emotion.trim()) add('warn', `${tag}: mood_delta sem primary_emotion.`, i);
+      for (const [k] of LEVELS) if (!Number.isInteger(d[k]) || d[k] < -10 || d[k] > 10) add('warn', `${tag}: mood_delta.${k} deveria ser um inteiro de -10 a 10.`, i);
+    }
+    if (!Array.isArray(m.timeline) || !m.timeline.length) { add('warn', `${tag}: timeline vazia.`, i); return; }
+    m.timeline.forEach((ev, k) => {
+      const where = `${tag}, evento ${k + 1}`;
+      if (!ev || typeof ev !== 'object') return add('error', `${where}: não é um objeto.`, i);
+      if (ev.event_role === 'action') {
+        if (!ids.has(ev.animation_id)) add('error', `${where}: animação "${ev.animation_id ?? ''}" não está no catálogo.`, i);
+        if (typeof ev.blend_weight !== 'number' || ev.blend_weight < 0 || ev.blend_weight > 1) add('error', `${where}: blend_weight precisa ser um número de 0 a 1.`, i);
+      } else if (ev.event_role === 'speech') {
+        if (typeof ev.text !== 'string' || !ev.text.trim()) add('warn', `${where}: fala vazia.`, i);
+      } else add('warn', `${where}: event_role desconhecido (${JSON.stringify(ev.event_role)}).`, i);
+    });
+  };
   const closeTurn = () => { if (turn && !hasAnswer) add('warn', `Turno ${turn}: sem resposta.`, lastUserIdx); };
   conv.forEach((m, i) => {
     switch (m.role) {
@@ -418,41 +454,34 @@ function validateConv(conv) {
         if (typeof m.summary !== 'string' || !m.summary.trim()) add('warn', 'Memória sem summary.', i);
         break;
       case 'user':
-        closeTurn(); turn++; hasMood = false; hasAnswer = false; lastUserIdx = i;
+        closeTurn(); turn++; hasMood = false; hasAnswer = false; lastUserIdx = i; branchCount = 0; turnEmos = [];
         if (typeof m.text !== 'string' || !m.text.trim()) add('warn', `Turno ${turn}: mensagem do usuário vazia.`, i);
         break;
       case 'mood':
         hasMood = true;
-        if (typeof m.primary_emotion !== 'string' || !m.primary_emotion.trim()) add('warn', `Turno ${turn}: primary_emotion vazio.`, i);
-        for (const [k] of LEVELS) {
-          if (!Number.isInteger(m[k]) || m[k] < 0 || m[k] > 10) add('warn', `Turno ${turn}: ${k} deveria ser um inteiro de 0 a 10.`, i);
-        }
+        turnEmos = [m.primary_emotion];
+        checkMood(m, i, `Turno ${turn}`);
         break;
-      case 'answer': {
+      case 'answer':
         hasAnswer = true;
         if (!turn) add('warn', 'Resposta antes de qualquer mensagem do usuário.', i);
         else if (!hasMood) add('warn', `Turno ${turn}: resposta sem 'mood' antes dela.`, i);
-        if (typeof m.agent_id !== 'string' || !m.agent_id.trim()) add('warn', `Turno ${turn}: agent_id vazio.`, i);
-        {
-          const d = m.mood_delta;
-          if (d === undefined) add('warn', `Turno ${turn}: falta o 'mood_delta' na resposta (o treino ficaria inconsistente).`, i);
-          else if (!d || typeof d !== 'object' || Array.isArray(d)) add('warn', `Turno ${turn}: mood_delta precisa ser um objeto.`, i);
-          else {
-            if (typeof d.primary_emotion !== 'string' || !d.primary_emotion.trim()) add('warn', `Turno ${turn}: mood_delta sem primary_emotion.`, i);
-            for (const [k] of LEVELS) if (!Number.isInteger(d[k]) || d[k] < -10 || d[k] > 10) add('warn', `Turno ${turn}: mood_delta.${k} deveria ser um inteiro de -10 a 10.`, i);
-          }
+        checkAnswer(m, i, `Turno ${turn}`);
+        break;
+      case 'branch': {
+        if (!turn) { add('warn', 'Ramo antes de qualquer mensagem do usuário.', i); break; }
+        branchCount++;
+        const tag = `Turno ${turn} (ramo ${branchCount + 1})`;
+        if (!hasAnswer) add('warn', `${tag}: o ramo deveria vir depois da resposta principal.`, i);
+        if (!m.mood || typeof m.mood !== 'object' || m.mood.role !== 'mood') add('warn', `${tag}: falta o objeto 'mood' (com role "mood").`, i);
+        else {
+          checkMood(m.mood, i, tag);
+          const emo = typeof m.mood.primary_emotion === 'string' ? m.mood.primary_emotion.trim() : '';
+          if (emo && turnEmos.some(x => typeof x === 'string' && x.trim() === emo)) add('warn', `${tag}: a emoção "${emo}" já aparece em outro ramo deste turno.`, i);
+          turnEmos.push(emo);
         }
-        if (!Array.isArray(m.timeline) || !m.timeline.length) { add('warn', `Turno ${turn}: timeline vazia.`, i); break; }
-        m.timeline.forEach((ev, k) => {
-          const where = `Turno ${turn}, evento ${k + 1}`;
-          if (!ev || typeof ev !== 'object') return add('error', `${where}: não é um objeto.`, i);
-          if (ev.event_role === 'action') {
-            if (!ids.has(ev.animation_id)) add('error', `${where}: animação "${ev.animation_id ?? ''}" não está no catálogo.`, i);
-            if (typeof ev.blend_weight !== 'number' || ev.blend_weight < 0 || ev.blend_weight > 1) add('error', `${where}: blend_weight precisa ser um número de 0 a 1.`, i);
-          } else if (ev.event_role === 'speech') {
-            if (typeof ev.text !== 'string' || !ev.text.trim()) add('warn', `${where}: fala vazia.`, i);
-          } else add('warn', `${where}: event_role desconhecido (${JSON.stringify(ev.event_role)}).`, i);
-        });
+        if (!m.answer || typeof m.answer !== 'object' || m.answer.role !== 'answer') add('warn', `${tag}: falta o objeto 'answer' (com role "answer").`, i);
+        else checkAnswer(m.answer, i, tag);
         break;
       }
       default:
@@ -493,7 +522,7 @@ function touch() {
   issuesTimer = setTimeout(refreshDerived, 220);
 }
 function refreshDerived() {
-  recomputeIssues(); renderStatus(); renderConvList(); renderIssues();
+  recomputeIssues(); renderStatus(); renderConvList(); renderIssues(); refreshBranchBars();
 }
 function setMode(mode) {
   S.mode = mode;
@@ -594,12 +623,13 @@ function renderConvList() {
     const iss = S.convIssues[i] || [];
     const hasErr = iss.some(x => x.level === 'error');
     const turns = conv.filter(m => m.role === 'user').length;
+    const nBranch = conv.filter(m => m.role === 'branch').length;
     items.push(h('button', {
       class: 'conv', type: 'button', 'aria-current': i === S.sel ? 'true' : null,
       onclick: () => { S.sel = i; renderConvList(); renderEditor(); },
     }, h('span', { class: 'ci' }, String(i + 1)),
        h('span', { class: 'ct' }, firstUser(conv) || '(sem mensagem do usuário)'),
-       turns > 1 ? h('span', { class: 'nt' }, `${turns} turnos`) : null,
+       (turns > 1 || nBranch) ? h('span', { class: 'nt' }, [turns > 1 ? `${turns} turnos` : '', nBranch ? `${nBranch} ${nBranch === 1 ? 'ramo' : 'ramos'}` : ''].filter(Boolean).join(' · ')) : null,
        iss.length ? h('span', { class: 'flag ' + (hasErr ? 'err' : 'warn'), title: `${iss.length} problema(s)` }, icon('warn')) : null));
   });
   list.replaceChildren(...(items.length ? items : [h('p', { class: 'muted small' }, q ? 'Nenhuma conversa encontrada.' : 'Nenhuma conversa ainda.')]));
@@ -666,6 +696,7 @@ function renderIssues() {
     const check = o => { const s = drafts.get(o); if (s) for (const d of Object.values(s)) if (d.error) drafted.push({ level: 'error', text: d.error, mi: i }); };
     check(m);
     if (Array.isArray(m.timeline)) m.timeline.forEach(check);
+    if (m.role === 'branch') for (const sub of [m.mood, m.answer]) if (sub && typeof sub === 'object') { check(sub); if (Array.isArray(sub.timeline)) sub.timeline.forEach(check); }
   });
   const all = [...drafted, ...list];
   const errs = all.filter(x => x.level === 'error').length;
@@ -681,7 +712,20 @@ function renderIssues() {
 }
 function jumpTo(mi) {
   if (mi === undefined) return;
-  const el = $(`#msgs [data-i="${mi}"]`);
+  let el = $(`#msgs [data-i="${mi}"]`);
+  if (!el || el.classList.contains('hidden-branch')) el = null;
+  const conv = S.cur && S.cur.data[S.sel];
+  if (conv && conv[mi]) {
+    // o alvo pode estar num ramo que não está na tela: mostra o ramo certo
+    let u = mi;
+    while (u >= 0 && conv[u].role !== 'user') u--;
+    if (u >= 0) {
+      let k = 0;
+      if (conv[mi].role === 'branch') for (let j = u + 1; j <= mi; j++) if (conv[j].role === 'branch') k++;
+      if ((branchSel.get(conv[u]) ?? 0) !== k && (conv[mi].role === 'branch' || conv[mi].role === 'mood' || conv[mi].role === 'answer')) { branchSel.set(conv[u], k); renderEditor(); el = null; }
+    }
+  }
+  el = el || $(`#msgs [data-i="${mi}"]`);
   if (!el) return;
   el.scrollIntoView({ block: 'center' });
   el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
@@ -690,13 +734,106 @@ function jumpTo(mi) {
 function msgBlocks(conv) {
   const out = [];
   let turn = 0;
-  conv.forEach((m, i) => {
-    if (m.role === 'user') { turn++; out.push(h('div', { class: 'turn' }, `Turno ${turn}`)); }
-    out.push(msgBlock(conv, i, m));
-  });
+  for (let i = 0; i < conv.length; i++) {
+    const m = conv[i];
+    if (m.role !== 'user') { out.push(msgBlock(conv, i, m)); continue; }
+    turn++;
+    let end = i + 1;
+    while (end < conv.length && conv[end].role !== 'user') end++;
+    const branches = [];
+    for (let j = i + 1; j < end; j++) if (conv[j].role === 'branch') branches.push(j);
+    const active = clamp(branchSel.get(m) ?? 0, 0, branches.length);
+    out.push(h('div', { class: 'turn' }, `Turno ${turn}`), msgBlock(conv, i, m));
+    let shownBar = false;
+    for (let j = i + 1; j < end; j++) {
+      const x = conv[j];
+      if (x.role === 'branch') continue;
+      if (active > 0 && (x.role === 'mood' || x.role === 'answer')) {
+        continue;
+      }
+      out.push(msgBlock(conv, j, x));
+    }
+    if (active > 0) {
+      const bi = branches[active - 1], br = conv[bi];
+      const tag = `ramo ${active + 1}`;
+      if (br.mood && typeof br.mood === 'object') out.push(msgBlock(conv, bi, br.mood, { branch: br, tag }));
+      if (br.answer && typeof br.answer === 'object') out.push(msgBlock(conv, bi, br.answer, { branch: br, tag }));
+      if (!br.mood && !br.answer) out.push(msgBlock(conv, bi, br));
+    }
+    if (conv.slice(i + 1, end).some(y => y.role === 'answer') || branches.length) out.push(branchBar(conv, i, end, branches, active));
+    i = end - 1;
+  }
   return out;
 }
-function msgBlock(conv, i, m) {
+function buildBranchBar(conv, ui) {
+  let end = ui + 1;
+  while (end < conv.length && conv[end].role !== 'user') end++;
+  const branches = [];
+  for (let j = ui + 1; j < end; j++) if (conv[j].role === 'branch') branches.push(j);
+  const active = clamp(branchSel.get(conv[ui]) ?? 0, 0, branches.length);
+  return branchBar(conv, ui, end, branches, active);
+}
+function refreshBranchBars() {
+  const conv = S.cur && S.cur.data[S.sel];
+  if (!conv) return;
+  document.querySelectorAll('#msgs .branchbar').forEach(el => {
+    if (el.contains(document.activeElement)) return;
+    const ui = parseInt(el.dataset.user, 10);
+    if (conv[ui] && conv[ui].role === 'user') el.replaceWith(buildBranchBar(conv, ui));
+  });
+}
+function emotionOf(m) { return m && typeof m.primary_emotion === 'string' && m.primary_emotion.trim() ? m.primary_emotion.trim() : '(sem emoção)'; }
+function branchBar(conv, ui, end, branches, active) {
+  const user = conv[ui];
+  const seg = conv.slice(ui + 1, end);
+  const pm = conv.findIndex((x, j) => j > ui && j < end && x.role === 'mood');
+  const pa = conv.findIndex((x, j) => j > ui && j < end && x.role === 'answer');
+  const options = [{ label: emotionOf(pm >= 0 ? conv[pm] : null) }, ...branches.map(j => ({ label: emotionOf(conv[j].mood) }))];
+  const show = k => {
+    branchSel.set(user, k); renderEditor();
+    const el = $(`#msgs [data-user="${ui}"]`); if (el) el.scrollIntoView({ block: 'nearest' });
+  };
+  const chips = options.map((o, k) => h('button', {
+    type: 'button', class: 'bchip', role: 'tab', 'aria-selected': String(k === active), title: k === 0 ? 'Resposta principal (a conversa continua por ela)' : `Ramo ${k + 1}`,
+    onclick: () => show(k),
+  }, h('b', null, String(k + 1)), o.label));
+  const sourceMood = active > 0 ? conv[branches[active - 1]].mood : pm >= 0 ? conv[pm] : null;
+  const sourceAnswer = active > 0 ? conv[branches[active - 1]].answer : pa >= 0 ? conv[pa] : null;
+  const addBranch = () => {
+    const mood = sourceMood ? clone(sourceMood) : mk.mood();
+    const answer = sourceAnswer ? clone(sourceAnswer) : mk.answer();
+    editing.add(mood); editing.add(answer);
+    const br = { role: 'branch', mood, answer };
+    conv.splice(end, 0, br);
+    branchSel.set(user, branches.length + 1);
+    touch(); refreshDerived(); renderEditor();
+    const el = $(`#msgs [data-user="${ui}"]`); if (el) el.scrollIntoView({ block: 'nearest' });
+    toast('Ramo criado como cópia do que estava na tela. Troque o humor e ajuste a resposta.');
+  };
+  const promote = () => {
+    const br = conv[branches[active - 1]];
+    if (pm < 0 || pa < 0) { toast('O turno precisa ter humor e resposta principais para trocar.', 'err'); return; }
+    [conv[pm], br.mood] = [br.mood, conv[pm]];
+    [conv[pa], br.answer] = [br.answer, conv[pa]];
+    branchSel.set(user, 0);
+    touch(); refreshDerived(); renderEditor();
+    toast('Ramo promovido: agora é a resposta principal.');
+  };
+  const del = async () => {
+    const j = branches[active - 1];
+    if (!await askConfirm(`Excluir o ramo ${active + 1} deste turno?`, { ok: 'Excluir', danger: true })) return;
+    forgetDrafts(conv[j]); conv.splice(j, 1);
+    branchSel.set(user, Math.max(0, active - 1));
+    touch(); refreshDerived(); renderEditor();
+  };
+  return h('div', { class: 'branchbar', 'data-user': String(ui) },
+    h('span', { class: 'bl' }, options.length > 1 ? 'Respostas para este turno' : 'Ramos'),
+    h('div', { class: 'bchips', role: 'tablist', 'aria-label': 'Ramos deste turno' }, chips),
+    btn('+ Ramo', addBranch),
+    active > 0 ? btn('Tornar principal', promote) : null,
+    active > 0 ? btn('Excluir ramo', del) : null);
+}
+function msgBlock(conv, i, m, opts = {}) {
   const swap = d => {
     const j = i + d;
     if (j < 0 || j >= conv.length) return;
@@ -709,19 +846,20 @@ function msgBlock(conv, i, m) {
   if (m.role === 'answer') body = isEdit ? answerEditor(conv, m) : bubbleView(m, false);
   else if (m.role === 'mood') body = isEdit ? moodEditor(conv, m) : moodView(m);
   else body = ({ system: systemEditor, memory: memoryEditor, user: userEditor }[m.role] || rawEditor)(conv, m);
-  const el = h('section', { class: 'msg msg-' + (ROLE_LABEL[m.role] ? m.role : 'other') + (isEdit ? ' editing' : ''), 'data-i': String(i) },
+  const inBranch = !!opts.branch;
+  const el = h('section', { class: 'msg msg-' + (ROLE_LABEL[m.role] ? m.role : 'other') + (isEdit ? ' editing' : '') + (inBranch ? ' in-branch' : ''), 'data-i': String(i) },
     m.role === 'answer' ? h('span', { class: 'avatar', 'aria-hidden': 'true' }, 'L') : m.role === 'mood' ? h('span', { class: 'avatar ghost', 'aria-hidden': 'true' }) : null,
     h('div', { class: 'bubble' },
       h('div', { class: 'msg-h' },
-        h('h3', null, m.role === 'mood' ? 'Humor da Lisa' : m.role === 'answer' ? 'Lisa' : ROLE_LABEL[m.role] || `Papel "${m.role}"`),
+        h('h3', null, (m.role === 'mood' ? 'Humor da Lisa' : m.role === 'answer' ? 'Lisa' : ROLE_LABEL[m.role] || `Papel "${m.role}"`) + (opts.tag ? ` · ${opts.tag}` : '')),
         h('div', { class: 'msg-tools' },
           editable ? iconBtn(isEdit ? 'check' : 'edit', isEdit ? 'Concluir edição' : 'Editar', () => {
             if (isEdit) editing.delete(m); else editing.add(m);
-            el.replaceWith(msgBlock(conv, i, m));
+            el.replaceWith(msgBlock(conv, i, m, opts));
           }) : null,
-          iconBtn('up', 'Mover mensagem para cima', () => swap(-1)),
-          iconBtn('down', 'Mover mensagem para baixo', () => swap(1)),
-          iconBtn('x', 'Excluir mensagem', () => { forgetDrafts(m); conv.splice(i, 1); touch(); refreshDerived(); renderEditor(); }))),
+          inBranch ? null : iconBtn('up', 'Mover mensagem para cima', () => swap(-1)),
+          inBranch ? null : iconBtn('down', 'Mover mensagem para baixo', () => swap(1)),
+          inBranch ? null : iconBtn('x', 'Excluir mensagem', () => { forgetDrafts(m); conv.splice(i, 1); touch(); refreshDerived(); renderEditor(); }))),
       body));
   return el;
 }

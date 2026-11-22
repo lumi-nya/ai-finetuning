@@ -26,6 +26,11 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
       completion = o que o modelo deve gerar depois (mood + answer, e o answer
                    termina com 'mood_delta'), até o próximo 'user'
 
+    Um turno pode ter respostas alternativas (mensagens 'branch' com 'mood' e
+    'answer'): cada uma vira um exemplo extra com o MESMO prompt, e o modelo
+    aprende que aquele turno admite vários humores. Os ramos não entram no
+    contexto dos turnos seguintes (a conversa continua pela resposta principal).
+
     O treino calcula a perda só na completion, então o mood de cada turno é
     aprendido como parte da resposta daquele turno. O prompt termina em "\\n"
     para que a fronteira prompt/completion caia entre dois tokens, do mesmo
@@ -44,9 +49,14 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
     for turn, start in enumerate(user_positions, start=1):
         is_last = turn == len(user_positions)
         end = len(conversation) if is_last else user_positions[turn]
-        reply = conversation[start + 1:end]
+        segment = conversation[start + 1:end]
+        # 'branch' = resposta alternativa (mood + answer) para o mesmo turno.
+        # Não entra no contexto dos turnos seguintes; vira um exemplo extra
+        # com o mesmo prompt.
+        reply = [m for m in segment if m.get("role") != "branch"]
+        branches = [m for m in segment if m.get("role") == "branch"]
 
-        if not reply:
+        if not reply and not branches:
             print(f"[WARN] {label}, turn {turn} ignored: nothing after the user message.")
             continue
 
@@ -57,13 +67,21 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
 
         context = [
             message for message in conversation[:start + 1]
-            if message["role"] != "mood"
+            if message["role"] not in ("mood", "branch")
         ]
+        prompt = "\n".join(to_lines(context)) + "\n"
 
-        examples.append({
-            "prompt": "\n".join(to_lines(context)) + "\n",
-            "completion": "\n".join(to_lines(reply)),
-        })
+        if reply:
+            examples.append({"prompt": prompt, "completion": "\n".join(to_lines(reply))})
+
+        for number, branch in enumerate(branches, start=2):
+            mood, answer = branch.get("mood"), branch.get("answer")
+            if not isinstance(mood, dict) or not isinstance(answer, dict):
+                print(f"[WARN] {label}, turn {turn}, branch {number} ignored: needs 'mood' and 'answer' objects.")
+                continue
+            if not isinstance(answer.get("mood_delta"), dict):
+                print(f"[WARN] {label}, turn {turn}, branch {number}: answer without 'mood_delta'.")
+            examples.append({"prompt": prompt, "completion": "\n".join(to_lines([mood, answer]))})
 
     return examples
 

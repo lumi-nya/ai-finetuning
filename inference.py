@@ -38,10 +38,11 @@ class LisaInference:
     def generate(self, context: list[dict], max_new_tokens: int = 256) -> str:
 
         # Igual ao prompt dos exemplos de treino (convert_dataset.py):
-        # - sem as mensagens 'mood' (só o turno atual gera um mood);
+        # - sem as mensagens 'mood' (só o turno atual gera um mood) nem 'branch'
+        #   (respostas alternativas do dataset, que não fazem parte do contexto);
         # - terminando em "\n", para que a fronteira entre o prompt e o que o
         #   modelo gera caia entre dois tokens, como no treino.
-        context = [item for item in context if item.get("role") != "mood"]
+        context = [item for item in context if item.get("role") not in ("mood", "branch")]
 
         prompt = "\n".join(
             json.dumps(item, ensure_ascii=False)

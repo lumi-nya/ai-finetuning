@@ -84,18 +84,24 @@ def check_structure(data):
 
 def normalize_for_save(data):
     """O JS não distingue 1 de 1.0; blend_weight é sempre float nos datasets."""
+    answers = []
     for conv in data:
         for msg in conv:
-            if msg.get("role") != "answer" or not isinstance(msg.get("timeline"), list):
-                continue
-            for ev in msg["timeline"]:
-                if (
-                    isinstance(ev, dict)
-                    and ev.get("event_role") == "action"
-                    and isinstance(ev.get("blend_weight"), int)
-                    and not isinstance(ev.get("blend_weight"), bool)
-                ):
-                    ev["blend_weight"] = float(ev["blend_weight"])
+            if msg.get("role") == "answer":
+                answers.append(msg)
+            elif msg.get("role") == "branch" and isinstance(msg.get("answer"), dict):
+                answers.append(msg["answer"])  # ramo: o answer fica dentro da mensagem
+    for msg in answers:
+        if not isinstance(msg.get("timeline"), list):
+            continue
+        for ev in msg["timeline"]:
+            if (
+                isinstance(ev, dict)
+                and ev.get("event_role") == "action"
+                and isinstance(ev.get("blend_weight"), int)
+                and not isinstance(ev.get("blend_weight"), bool)
+            ):
+                ev["blend_weight"] = float(ev["blend_weight"])
 
 
 def list_datasets():
@@ -194,6 +200,8 @@ def compute_defaults():
                     catalog_by_key[key] = msg["animation_catalog"]
                 elif role == "mood" and isinstance(msg.get("primary_emotion"), str):
                     emotions[msg["primary_emotion"]] += 1
+                elif role == "branch" and isinstance(msg.get("mood"), dict) and isinstance(msg["mood"].get("primary_emotion"), str):
+                    emotions[msg["mood"]["primary_emotion"]] += 1
                 elif role == "answer" and isinstance(msg.get("agent_id"), str):
                     agents[msg["agent_id"]] += 1
     catalog = catalog_by_key[catalogs.most_common(1)[0][0]] if catalogs else []
@@ -263,7 +271,7 @@ def parse_model_output(text):
 def build_prompt(context):
     # Mesma serialização do LisaInference.generate (só para exibir na GUI):
     # sem mensagens 'mood', uma mensagem JSON por linha, terminando em "\n".
-    items = [item for item in context if item.get("role") != "mood"]
+    items = [item for item in context if item.get("role") not in ("mood", "branch")]
     return "\n".join(json.dumps(item, ensure_ascii=False) for item in items) + "\n"
 
 
