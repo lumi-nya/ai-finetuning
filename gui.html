@@ -1015,10 +1015,11 @@ function buildContext() {
   const c = S.chat;
   const ctx = [clone(c.catalog)];
   if (c.memoryOn) ctx.push(clone(c.memory));
+  // Turnos anteriores entram só com user e answer: o mood não vai no contexto
+  // (o modelo gera o mood do turno atual), igual ao prompt de treino.
   for (const t of c.turns) {
     if (!t.answer) continue;
     ctx.push({ role: 'user', text: t.user });
-    if (t.mood) ctx.push(t.mood);
     ctx.push(t.answer);
   }
   return ctx;

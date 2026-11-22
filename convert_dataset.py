@@ -20,13 +20,16 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
     Um exemplo de treino por turno, no formato prompt/completion:
 
       prompt     = tudo até a mensagem 'user' do turno, uma mensagem JSON por
-                   linha, terminando em "\\n" (igual ao prompt de inference.py)
+                   linha, terminando em "\\n" (igual ao prompt de inference.py).
+                   As mensagens 'mood' ficam de fora: dos turnos anteriores
+                   só interessa o que foi dito e feito (user e answer).
       completion = o que o modelo deve gerar depois (mood + answer), até o
                    próximo 'user'
 
-    O treino calcula a perda só na completion. O prompt termina em "\\n" para
-    que a fronteira prompt/completion caia entre dois tokens, do mesmo jeito
-    no treino e na inferência.
+    O treino calcula a perda só na completion, então o mood de cada turno é
+    aprendido como parte da resposta daquele turno. O prompt termina em "\\n"
+    para que a fronteira prompt/completion caia entre dois tokens, do mesmo
+    jeito no treino e na inferência.
     """
     user_positions = [
         i for i, message in enumerate(conversation) if message["role"] == "user"
@@ -47,8 +50,13 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
             print(f"[WARN] {label}, turn {turn} ignored: nothing after the user message.")
             continue
 
+        context = [
+            message for message in conversation[:start + 1]
+            if message["role"] != "mood"
+        ]
+
         examples.append({
-            "prompt": "\n".join(to_lines(conversation[:start + 1])) + "\n",
+            "prompt": "\n".join(to_lines(context)) + "\n",
             "completion": "\n".join(to_lines(reply)),
         })
 
