@@ -9,7 +9,7 @@
 :root {
   --paper: #F2F4F8; --surface: #FFFFFF; --sunk: #E9EDF4;
   --ink: #1C2438; --muted: #5B6580; --line: #D5DBE8; --rail: #B9C8E6;
-  --blue: #3F6FD8; --blue-soft: #DCE6FA;
+  --blue: #3F6FD8; --blue-soft: #DCE6FA; --bubble-user: #3F6FD8;
   --teal: #0B7A7A; --teal-soft: #D6EFEF;
   --red: #C62F2F; --red-soft: #FADADA;
   --amber: #9A5B00; --amber-soft: #F8E8C8;
@@ -20,7 +20,7 @@
   :root {
     --paper: #171E33; --surface: #1F2842; --sunk: #131A2D;
     --ink: #E6EAF5; --muted: #A3AECB; --line: #34405F; --rail: #4A5D8C;
-    --blue: #8CAEFA; --blue-soft: #2A3A66;
+    --blue: #8CAEFA; --blue-soft: #2A3A66; --bubble-user: #3A58B0;
     --teal: #55C7C7; --teal-soft: #1B4348;
     --red: #FF8A8A; --red-soft: #4A2530;
     --amber: #E8B85A; --amber-soft: #4A3A18;
@@ -102,17 +102,38 @@ textarea.code { min-height: 5em; }
 .issues li button:hover { background: var(--sunk); }
 .issues .lv-err { color: var(--red); } .issues .lv-warn { color: var(--amber); }
 
-.turn { margin: 30px 0 0; padding-top: 14px; border-top: 2px solid var(--blue); font-size: 17px; font-weight: 700; }
-.msg { padding: 14px 0 16px; border-top: 1px solid var(--line); scroll-margin-top: 16px; }
-.turn + .msg { border-top: 0; }
-.msg-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.msg-h h3 { font-size: 13.5px; font-weight: 600; color: var(--muted); }
-.msg-tools { display: flex; opacity: .55; }
+.turn { align-self: center; margin: 18px 0 6px; padding: 2px 12px; font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; }
+#msgs { display: flex; flex-direction: column; gap: 6px; padding: 14px clamp(8px, 2vw, 22px) 20px; background: var(--sunk); border: 1px solid var(--line); border-radius: 14px; }
+.msg, .say-row { display: flex; gap: 8px; align-items: flex-end; scroll-margin-top: 16px; }
+.bubble { max-width: min(80%, 640px); min-width: 0; padding: 7px 13px 10px; border-radius: 18px; position: relative; overflow-wrap: anywhere; }
+.msg-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 22px; margin-bottom: 2px; }
+.msg-h h3 { font-size: 12px; font-weight: 600; color: var(--muted); }
+.msg-tools { display: flex; opacity: 0; transition: opacity .15s; }
 .msg:hover .msg-tools, .msg:focus-within .msg-tools { opacity: 1; }
-.msg-user { border-left: 3px solid var(--blue); padding-left: 14px; }
-.msg-answer { border-left: 3px solid var(--teal); padding-left: 14px; }
-.flash { animation: flash 1.2s ease-out; }
-@keyframes flash { from { background: var(--blue-soft); } to { background: transparent; } }
+@media (hover: none) { .msg-tools { opacity: .8; } }
+.msg-user { justify-content: flex-end; }
+.msg-user .bubble { background: var(--bubble-user); color: #fff; border-bottom-right-radius: 5px; }
+.msg-user .msg-h h3 { color: inherit; opacity: .75; }
+.msg-user .ib { color: #fff; } .msg-user .ib:hover { background: rgba(255,255,255,.2); color: #fff; }
+.msg-user textarea { background: transparent; border: 0; padding: 0; color: inherit; resize: none; min-height: 1.6em; width: min(60vw, 520px); max-width: 100%; }
+.msg-user textarea::placeholder { color: rgba(255,255,255,.65); }
+.msg-answer .bubble, .reply { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+.msg-answer.editing .bubble { max-width: 100%; flex: 1; }
+.msg-mood .bubble { background: var(--teal-soft); border-radius: 12px; padding: 4px 12px 7px; }
+.msg-mood.editing .bubble { flex: 1; max-width: 100%; }
+.msg-system, .msg-memory, .msg-other { justify-content: center; }
+.msg-system .bubble, .msg-memory .bubble, .msg-other .bubble { max-width: min(100%, 760px); width: 100%; background: var(--surface); border: 1px dashed var(--rail); border-radius: 12px; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--teal); color: #fff; font-weight: 700; display: grid; place-items: center; flex: none; }
+.avatar.ghost { background: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 5px 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--teal-soft); color: var(--teal); border-radius: 99px; padding: 1px 10px; font: 600 12.5px var(--code); }
+.chip b { font-weight: 500; color: var(--muted); }
+.gem { width: 7px; height: 7px; background: currentColor; transform: rotate(45deg); border-radius: 1px; }
+.bview .say { margin: 3px 0; }
+.bview .mood.delta { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.reveal .say, .reveal .chip { animation: cue .45s ease-out both; animation-delay: calc(var(--i) * 110ms); }
+.flash .bubble { animation: flash 1.2s ease-out; }
+@keyframes flash { 50% { box-shadow: 0 0 0 4px var(--blue-soft); } }
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .field > span { font-size: 13px; color: var(--muted); }
@@ -171,9 +192,9 @@ details.fold > summary { cursor: pointer; font-size: 13.5px; color: var(--muted)
 /* conversa */
 #chat-view .pane { display: flex; flex-direction: column; padding-bottom: 0; }
 #transcript { flex: 1; min-height: 0; width: 100%; }
-.say-user { border-left: 3px solid var(--blue); padding: 2px 0 2px 14px; margin: 22px 0 10px; white-space: pre-wrap; }
-.who { font-size: 13px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 2px; }
-.reply { border-left: 3px solid var(--teal); padding: 2px 0 6px 14px; }
+#transcript { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; }
+.reply .mood:not(.delta) { padding-bottom: 7px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.tpair { display: flex; flex-direction: column; gap: 6px; }
 .reply-tools { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
 .note { font-size: 13px; color: var(--amber); margin-top: 4px; }
 .raw { margin-top: 4px; }
@@ -276,7 +297,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const ICONS = {
   up: 'M6 15l6-6 6 6', down: 'M6 9l6 6 6-6', x: 'M6 6l12 12M18 6L6 18',
   plus: 'M12 5v14M5 12h14', warn: 'M12 4l9 16H3zM12 10v4M12 17v.5',
-  send: 'M4 12l16-8-6 16-3-7z', copy: 'M9 9h10v10H9zM5 15V5h10',
+  send: 'M4 12l16-8-6 16-3-7z', copy: 'M9 9h10v10H9zM5 15V5h10', edit: 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4', check: 'M5 12l5 5 10-10',
 };
 function icon(name) {
   const s = document.createElementNS(SVG_NS, 'svg');
@@ -330,6 +351,7 @@ const S = {
   model: { state: 'idle', error: null, mock: false, model: '', adapter: '' },
   chat: { catalog: null, memoryOn: false, memory: null, turns: [], maxTokens: 256, busy: false },
 };
+const editing = new WeakSet(); // mood/answer abertos para edição
 const drafts = new Map(); // objeto -> {chave: {text, error}}  (JSON ainda inválido)
 
 const ROLE_LABEL = { system: 'Sistema', memory: 'Memória', user: 'Usuário', mood: 'Humor', answer: 'Resposta' };
@@ -582,11 +604,16 @@ function renderConvList() {
   });
   list.replaceChildren(...(items.length ? items : [h('p', { class: 'muted small' }, q ? 'Nenhuma conversa encontrada.' : 'Nenhuma conversa ainda.')]));
 }
+function newTurn() {
+  const mood = mk.mood(), answer = mk.answer();
+  editing.add(mood); editing.add(answer);
+  return [mk.user(), mood, answer];
+}
 function newConversation() {
   const c = S.cur;
   if (!c) { toast('Abra ou crie um arquivo primeiro.', 'err'); return; }
   const catalog = c.data.length ? catalogOf(c.data[c.data.length - 1]) : S.defaults.catalog;
-  c.data.push([mk.system(catalog), mk.user(), mk.mood(), mk.answer()]);
+  c.data.push([mk.system(catalog), ...newTurn()]);
   S.sel = c.data.length - 1; S.filter = ''; $('#filter').value = '';
   touch(); refreshDerived(); renderEditor();
   requestAnimationFrame(() => { const t = $('#msgs .msg-user textarea'); if (t) t.focus(); });
@@ -664,7 +691,7 @@ function msgBlocks(conv) {
   const out = [];
   let turn = 0;
   conv.forEach((m, i) => {
-    if (m.role === 'user') { turn++; out.push(h('h3', { class: 'turn' }, `Turno ${turn}`)); }
+    if (m.role === 'user') { turn++; out.push(h('div', { class: 'turn' }, `Turno ${turn}`)); }
     out.push(msgBlock(conv, i, m));
   });
   return out;
@@ -676,15 +703,27 @@ function msgBlock(conv, i, m) {
     [conv[i], conv[j]] = [conv[j], conv[i]];
     touch(); refreshDerived(); renderEditor();
   };
-  const body = ({ system: systemEditor, memory: memoryEditor, user: userEditor, mood: moodEditor, answer: answerEditor }[m.role] || rawEditor)(conv, m);
-  return h('section', { class: 'msg msg-' + (ROLE_LABEL[m.role] ? m.role : 'other'), 'data-i': String(i) },
-    h('div', { class: 'msg-h' },
-      h('h3', null, ROLE_LABEL[m.role] || `Papel "${m.role}"`),
-      h('div', { class: 'msg-tools' },
-        iconBtn('up', 'Mover mensagem para cima', () => swap(-1)),
-        iconBtn('down', 'Mover mensagem para baixo', () => swap(1)),
-        iconBtn('x', 'Excluir mensagem', () => { forgetDrafts(m); conv.splice(i, 1); touch(); refreshDerived(); renderEditor(); }))),
-    body);
+  const editable = m.role === 'answer' || m.role === 'mood';
+  const isEdit = editable && editing.has(m);
+  let body;
+  if (m.role === 'answer') body = isEdit ? answerEditor(conv, m) : bubbleView(m, false);
+  else if (m.role === 'mood') body = isEdit ? moodEditor(conv, m) : moodView(m);
+  else body = ({ system: systemEditor, memory: memoryEditor, user: userEditor }[m.role] || rawEditor)(conv, m);
+  const el = h('section', { class: 'msg msg-' + (ROLE_LABEL[m.role] ? m.role : 'other') + (isEdit ? ' editing' : ''), 'data-i': String(i) },
+    m.role === 'answer' ? h('span', { class: 'avatar', 'aria-hidden': 'true' }, 'L') : m.role === 'mood' ? h('span', { class: 'avatar ghost', 'aria-hidden': 'true' }) : null,
+    h('div', { class: 'bubble' },
+      h('div', { class: 'msg-h' },
+        h('h3', null, m.role === 'mood' ? 'Humor da Lisa' : m.role === 'answer' ? 'Lisa' : ROLE_LABEL[m.role] || `Papel "${m.role}"`),
+        h('div', { class: 'msg-tools' },
+          editable ? iconBtn(isEdit ? 'check' : 'edit', isEdit ? 'Concluir edição' : 'Editar', () => {
+            if (isEdit) editing.delete(m); else editing.add(m);
+            el.replaceWith(msgBlock(conv, i, m));
+          }) : null,
+          iconBtn('up', 'Mover mensagem para cima', () => swap(-1)),
+          iconBtn('down', 'Mover mensagem para baixo', () => swap(1)),
+          iconBtn('x', 'Excluir mensagem', () => { forgetDrafts(m); conv.splice(i, 1); touch(); refreshDerived(); renderEditor(); }))),
+      body));
+  return el;
 }
 function addBar(conv) {
   const hasMemory = conv.some(m => m.role === 'memory');
@@ -693,11 +732,11 @@ function addBar(conv) {
     onchange: e => {
       const role = e.target.value; e.target.value = '';
       if (!role) return;
-      conv.push(mk[role]()); touch(); refreshDerived(); renderEditor();
+      { const nm = mk[role](); if (role !== 'user') editing.add(nm); conv.push(nm); } touch(); refreshDerived(); renderEditor();
     },
   }, h('option', { value: '' }, 'Mensagem avulsa…'), h('option', { value: 'user' }, 'Usuário'), h('option', { value: 'mood' }, 'Humor'), h('option', { value: 'answer' }, 'Resposta'));
   return h('div', { class: 'add-bar' },
-    btn('Adicionar turno', () => { conv.push(mk.user(), mk.mood(), mk.answer()); touch(); refreshDerived(); renderEditor(); }, 'primary'),
+    btn('Adicionar turno', () => { conv.push(...newTurn()); touch(); refreshDerived(); renderEditor(); }, 'primary'),
     hasMemory ? null : btn('Adicionar memória', () => {
       const at = conv.findIndex(m => m.role === 'system') + 1;
       conv.splice(at, 0, mk.memory()); touch(); refreshDerived(); renderEditor();
@@ -761,7 +800,7 @@ function memoryEditor(conv, m) {
     h('div', { class: 'field' }, h('span', null, 'key_facts (JSON)'), jsonArea(m, 'key_facts')));
 }
 function userEditor(conv, m) {
-  return h('textarea', { 'aria-label': 'Texto do usuário', value: m.text ?? '', oninput: e => { m.text = e.target.value; touch(); } });
+  return h('textarea', { 'aria-label': 'Texto do usuário', placeholder: 'Mensagem do usuário…', value: m.text ?? '', oninput: e => { m.text = e.target.value; touch(); } });
 }
 function moodEditor(conv, m) {
   const level = ([k, label]) => {
@@ -927,6 +966,24 @@ function timelineView(events, fresh) {
     if (ev && ev.event_role === 'speech') return h('div', { class: 'ev ev-speech', style }, h('span', { class: 'mark' }), h('p', { class: 'say' }, ev.text ?? ''));
     return h('div', { class: 'ev ev-other', style }, h('span', { class: 'mark' }), h('code', null, JSON.stringify(ev)));
   }));
+}
+function bubbleView(m, fresh) {
+  const out = [];
+  let chips = null;
+  (Array.isArray(m.timeline) ? m.timeline : []).forEach((ev, i) => {
+    const style = `--i:${i}`;
+    if (ev && ev.event_role === 'action') {
+      if (!chips) { chips = h('div', { class: 'chips' }); out.push(chips); }
+      chips.append(h('span', { class: 'chip', style, title: `blend_weight ${fmtW(ev.blend_weight)}` }, h('i', { class: 'gem' }), ev.animation_id ?? '?', h('b', null, fmtW(ev.blend_weight))));
+      return;
+    }
+    chips = null;
+    if (ev && ev.event_role === 'speech') out.push(h('p', { class: 'say', style }, ev.text ?? ''));
+    else out.push(h('code', { class: 'say', style }, JSON.stringify(ev)));
+  });
+  if (!out.length) out.push(h('p', { class: 'say muted' }, '(resposta vazia)'));
+  return h('div', { class: 'bview' + (fresh ? ' reveal' : '') }, out,
+    deltaView(m.mood_delta) || h('p', { class: 'note' }, 'Sem mood_delta nesta resposta.'));
 }
 const sgn = n => (Number.isInteger(n) ? (n > 0 ? '+' + n : String(n)) : '?');
 function deltaView(d) {
@@ -1099,22 +1156,20 @@ function renderTranscript() {
     return;
   }
   box.replaceChildren(...turns.map((t, i) => {
-    const user = h('div', { class: 'say-user' }, h('span', { class: 'who' }, 'Você'), t.user);
+    const user = h('div', { class: 'msg msg-user' }, h('div', { class: 'bubble' }, h('span', { class: 'say', style: 'white-space:pre-wrap' }, t.user)));
+    const lisa = (...kids) => h('div', { class: 'msg msg-answer' }, h('span', { class: 'avatar', 'aria-hidden': 'true' }, 'L'), h('div', { class: 'bubble reply' }, ...kids));
     let reply;
-    if (t.status === 'pending') reply = h('div', { class: 'reply' }, h('span', { class: 'who' }, 'Lisa'), h('p', { class: 'muted' }, 'Gerando…'));
-    else if (t.status === 'error') reply = h('div', { class: 'reply' }, h('span', { class: 'who' }, 'Lisa'), h('p', { class: 'err-text' }, t.error));
+    if (t.status === 'pending') reply = lisa(h('p', { class: 'muted' }, 'Gerando…'));
+    else if (t.status === 'error') reply = lisa(h('p', { class: 'err-text' }, t.error));
     else {
       const notes = [];
       if (!t.answer) notes.push('O modelo não gerou um objeto "answer" válido. Este turno não entra no contexto das próximas mensagens.');
       if (!t.mood) notes.push('O modelo não gerou "mood".');
-      if (t.answer && !t.answer.mood_delta) notes.push('A resposta veio sem "mood_delta".');
       if (t.stoppedAt) notes.push(`A saída foi cortada onde o modelo começou a inventar uma mensagem "${t.stoppedAt}".`);
       if (t.junk && t.junk.length) notes.push('Parte da saída não era JSON válido (veja a saída bruta).');
-      reply = h('div', { class: 'reply' },
-        h('span', { class: 'who' }, 'Lisa'),
+      reply = lisa(
         t.mood ? moodView(t.mood) : null,
-        t.answer ? timelineView(t.answer.timeline, t.fresh) : null,
-        t.answer ? deltaView(t.answer.mood_delta) : null,
+        t.answer ? bubbleView(t.answer, t.fresh) : null,
         ...notes.map(n => h('p', { class: 'note' }, n)),
         h('details', { class: 'raw' }, h('summary', { class: 'small muted' }, `Saída bruta${t.seconds != null ? ` (${t.seconds}s)` : ''}`),
           h('pre', null, t.raw ?? ''),
@@ -1122,7 +1177,7 @@ function renderTranscript() {
         i === turns.length - 1 ? h('div', { class: 'reply-tools' }, btn('Gerar de novo', retryLast)) : null);
       t.fresh = false;
     }
-    return h('div', null, user, reply);
+    return h('div', { class: 'tpair' }, user, reply);
   }));
   const pane = box.parentElement;
   pane.scrollTop = pane.scrollHeight;
