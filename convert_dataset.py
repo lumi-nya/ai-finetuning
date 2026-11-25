@@ -1,8 +1,10 @@
 
 import json
 import argparse
+import os
 from pathlib import Path
 
+from conversation_format import conversation_to_lines, read_conversation_file
 from prompting import GENERATED_ROLES, render_prompt
 
 ROOT = Path(__file__).resolve().parent
@@ -121,7 +123,7 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
     return examples
 
 
-def convert_dataset(input_path: Path, output_dir: Path):
+def convert_dataset(input_path: Path, output_dir: Path, fmt: str = "pairs"):
     print(f"Processing: {input_path}")
 
     with input_path.open("r", encoding="utf-8") as file:
@@ -161,6 +163,11 @@ def convert_dataset(input_path: Path, output_dir: Path):
             used_conversations += 1
             examples.extend(converted)
 
+    if fmt == "conversations":
+        write_conversation_files(dataset, examples, input_path, output_dir)
+        print(f"Finished: {input_path}\n")
+        return
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Um arquivo por dataset de origem: datasets/playful.json -> .datasets/playful.jsonl
@@ -175,6 +182,39 @@ def convert_dataset(input_path: Path, output_dir: Path):
         f"({len(examples)} examples from {used_conversations} conversations)"
     )
     print(f"Finished: {input_path}\n")
+
+
+def write_conversation_files(dataset, expected, input_path: Path, output_dir: Path):
+    """
+    Formato 'conversations': uma conversa por arquivo, uma mensagem por linha,
+    com marcadores <|response|> / <|alt|> / <|end|> (ver conversation_format.py).
+    Depois de gravar, lê os arquivos de volta e confere que dão exatamente os
+    mesmos exemplos do formato 'pairs'.
+    """
+    target = output_dir / input_path.stem
+    target.mkdir(parents=True, exist_ok=True)
+
+    for stale in target.glob("*.jsonl"):
+        stale.unlink()
+
+    written = []
+    for index, conversation in enumerate(dataset, start=1):
+        if not isinstance(conversation, list) or not conversation:
+            continue
+        if not any(m["role"] == "user" for m in conversation):
+            continue
+        path = target / f"{index:03d}.jsonl"
+        path.write_text("\n".join(conversation_to_lines(conversation, f"Context {index}")) + "\n", encoding="utf-8")
+        written.append(path)
+
+    got = [example for path in written for example in read_conversation_file(path)]
+    if got != expected:
+        raise ValueError(
+            f"{input_path}: the written conversation files do not reproduce the training examples "
+            f"({len(got)} read back vs {len(expected)} expected)."
+        )
+
+    print(f"  -> {target}{os.sep} ({len(written)} files, {len(got)} examples, verified)")
 
 
 def remove_legacy_outputs(output_dir: Path):
@@ -193,21 +233,32 @@ def main():
     )
 
     parser.add_argument(
+        "--format",
+        choices=["pairs", "conversations"],
+        default="pairs",
+        help="pairs: one .jsonl per dataset with {prompt, completion} lines (default). "
+             "conversations: one .jsonl per conversation, one message per line, with "
+             "<|response|>/<|alt|>/<|end|> markers (see conversation_format.py)."
+    )
+
+    parser.add_argument(
         "--output",
-        default=str(ROOT / ".datasets"),
-        help="Output directory (default: .datasets next to this script)."
+        default=None,
+        help="Output directory (default: .datasets for pairs, .conversations for conversations)."
     )
 
     args = parser.parse_args()
 
-    output_dir = Path(args.output)
+    output_dir = Path(args.output) if args.output else ROOT / (
+        ".conversations" if args.format == "conversations" else ".datasets"
+    )
     inputs = args.inputs or [str(p) for p in sorted((ROOT / "datasets").glob("*.json"))]
 
     if not inputs:
         print("[ERROR] No input files found.")
         return
 
-    if output_dir.is_dir():
+    if args.format == "pairs" and output_dir.is_dir():
         remove_legacy_outputs(output_dir)
 
     for input_file in inputs:
@@ -218,7 +269,7 @@ def main():
             continue
 
         try:
-            convert_dataset(input_path, output_dir)
+            convert_dataset(input_path, output_dir, args.format)
         except (json.JSONDecodeError, ValueError, OSError) as error:
             print(f"[ERROR] {input_path}: {error}")
 

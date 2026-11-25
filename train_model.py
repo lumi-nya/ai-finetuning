@@ -1,9 +1,10 @@
 
+import argparse
 import traceback
 
 import torch
 from pathlib import Path
-from datasets import concatenate_datasets, load_dataset
+from datasets import Dataset, concatenate_datasets, load_dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -14,6 +15,19 @@ from peft import (
     prepare_model_for_kbit_training
 )
 from trl import SFTConfig, SFTTrainer
+
+from conversation_format import load_conversation_examples
+
+parser = argparse.ArgumentParser(description="Fine-tune Lisa with LoRA.")
+parser.add_argument(
+    "--data",
+    choices=["pairs", "conversations"],
+    default="pairs",
+    help="pairs: .datasets/*.jsonl made by convert_dataset.py (default). "
+         "conversations: .conversations/<dataset>/<nnn>.jsonl made by "
+         "convert_dataset.py --format conversations.",
+)
+args = parser.parse_args()
 
 print("CUDA:", torch.cuda.is_available())
 print("GPU:", torch.cuda.get_device_name(0))
@@ -81,26 +95,42 @@ lora_config = LoraConfig(
     ]
 )
 
-dataset_dir = Path(__file__).resolve().parent / ".datasets"
-dataset_files = sorted(dataset_dir.glob("*.jsonl"))
+root = Path(__file__).resolve().parent
 
-if not dataset_files:
-    raise RuntimeError("Nenhum arquivo JSONL encontrado.")
+if args.data == "conversations":
+    conversation_dir = root / ".conversations"
+    files, examples = load_conversation_examples(conversation_dir)
 
-datasets = []
+    if not files:
+        raise RuntimeError(
+            f"Nenhum arquivo em {conversation_dir}. "
+            "Rode: python convert_dataset.py --format conversations"
+        )
 
-for file in dataset_files:
-    print(f"Carregando: {file.name}")
+    print(f"Conversas: {len(files)} arquivos em {conversation_dir.name}/")
+    dataset = Dataset.from_list(examples)
+else:
+    dataset_dir = root / ".datasets"
+    dataset_files = sorted(dataset_dir.glob("*.jsonl"))
 
-    current = load_dataset(
-        "json",
-        data_files=str(file),
-        split="train"
-    )
+    if not dataset_files:
+        raise RuntimeError("Nenhum arquivo JSONL encontrado.")
 
-    datasets.append(current)
+    datasets = []
 
-dataset = concatenate_datasets(datasets)
+    for file in dataset_files:
+        print(f"Carregando: {file.name}")
+
+        current = load_dataset(
+            "json",
+            data_files=str(file),
+            split="train"
+        )
+
+        datasets.append(current)
+
+    dataset = concatenate_datasets(datasets)
+
 dataset = dataset.filter(
     lambda ex: isinstance(ex.get("prompt"), str) and ex["prompt"].strip() != ""
     and isinstance(ex.get("completion"), str) and ex["completion"].strip() != ""
