@@ -66,6 +66,51 @@ class ChatApi(unittest.TestCase):
         self.assertEqual(d["default_mood"]["role"], "mood")
 
 
+class SharedSystemApi(unittest.TestCase):
+    def setUp(self):
+        import shared_system as ss
+        self.ss, self.tmp = ss, tempfile.TemporaryDirectory()
+        tmp = Path(self.tmp.name)
+        self.old = (ss.CHARACTER_PATH, ss.SYSTEM_PATH, gui.DATASETS_DIR)
+        ss.CHARACTER_PATH, ss.SYSTEM_PATH, gui.DATASETS_DIR = tmp / "lisa.txt", tmp / "system.json", tmp / "datasets"
+        ss.save_shared_system({"character": "Lisa.", "animation_catalog": SYSTEM["animation_catalog"], "tools": SYSTEM["tools"]})
+        gui.DATASETS_DIR.mkdir()
+        self.conv = [{"role": "user", "text": "hi"}, mood(), answer()]
+        (gui.DATASETS_DIR / "d.json").write_text(json.dumps([self.conv]), encoding="utf-8")
+
+    def tearDown(self):
+        self.ss.CHARACTER_PATH, self.ss.SYSTEM_PATH, gui.DATASETS_DIR = self.old
+        self.tmp.cleanup()
+
+    def test_load_injects_and_save_strips(self):
+        loaded = gui.load_dataset_api("d")
+        self.assertEqual(loaded["data"][0][0]["role"], "system")
+        self.assertEqual(loaded["data"][0][0]["character"], "Lisa.")
+        gui.save_dataset_api("d", {"data": loaded["data"], "base_hash": loaded["hash"]})
+        on_disk = json.loads((gui.DATASETS_DIR / "d.json").read_text(encoding="utf-8"))
+        self.assertEqual(on_disk[0][0]["role"], "user")
+
+    def test_edited_system_is_kept_as_an_exception(self):
+        loaded = gui.load_dataset_api("d")
+        loaded["data"][0][0]["character"] = "other"
+        gui.save_dataset_api("d", {"data": loaded["data"], "base_hash": loaded["hash"]})
+        on_disk = json.loads((gui.DATASETS_DIR / "d.json").read_text(encoding="utf-8"))
+        self.assertEqual(on_disk[0][0]["character"], "other")
+
+    def test_defaults_come_from_the_shared_system(self):
+        d = gui.compute_defaults()
+        self.assertEqual(d["character"], "Lisa.")
+        self.assertEqual(d["catalog"], SYSTEM["animation_catalog"])
+
+    def test_system_put_validates_and_persists(self):
+        new = {"character": "Nova ficha", "animation_catalog": SYSTEM["animation_catalog"], "tools": []}
+        self.assertEqual(gui.system_api_put(new)["character"], "Nova ficha")
+        self.assertEqual(self.ss.CHARACTER_PATH.read_text(encoding="utf-8").strip(), "Nova ficha")
+        for bad in ({**new, "character": " "}, {**new, "animation_catalog": []}, {**new, "tools": "x"}):
+            with self.assertRaises(gui.ApiError):
+                gui.system_api_put(bad)
+
+
 class ChatFiles(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

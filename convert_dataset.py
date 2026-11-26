@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from conversation_format import conversation_to_lines, read_conversation_file
+from shared_system import load_shared_system, with_shared_system
 from prompting import GENERATED_ROLES, mood_delta_problems, mood_problems, render_prompt
 
 ROOT = Path(__file__).resolve().parent
@@ -151,6 +152,10 @@ def convert_dataset(input_path: Path, output_dir: Path, fmt: str = "pairs"):
     if not isinstance(dataset, list):
         raise ValueError(f"{input_path}: the JSON root must be a list.")
 
+    # A system (ficha + catálogo + tools) é igual em todas as conversas e não fica
+    # nos datasets: entra aqui, a menos que a conversa traga a sua própria.
+    shared = load_shared_system()
+    dataset = [with_shared_system(c, shared) if isinstance(c, list) and c else c for c in dataset]
     examples = []
     used_conversations = 0
 

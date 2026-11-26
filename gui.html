@@ -1041,16 +1041,21 @@ function characterFold(conv, m) {
     oninput: e => { m.character = e.target.value; touch(); refreshDerived(); } });
   const d = h('details', { class: 'fold', ontoggle: () => { d.open ? S.ui.open.add(key) : S.ui.open.delete(key); } },
     h('summary', null, has ? `Ficha da personagem (${m.character.length} caracteres)` : 'Ficha da personagem (ausente)'),
-    h('p', { class: 'muted small' }, 'Resumo que vai no prompt (character/lisa.txt). O modelo só deve afirmar o que está aqui, na memória ou na conversa.'),
+    h('p', { class: 'muted small' }, 'A system (ficha, catálogo e tools) é compartilhada: fica em character/ e não é repetida nos datasets. Editar só esta conversa a transforma numa exceção, gravada no dataset.'),
     ta,
     h('div', { class: 'row' },
       btn('Usar a ficha padrão', () => { m.character = S.defaults.character || ''; touch(); refreshDerived(); renderEditor(); }),
-      btn('Aplicar a todas as conversas', async () => {
-        const others = S.cur.data.length - 1;
-        if (!others) { toast('Só há uma conversa neste arquivo.'); return; }
-        if (!await askConfirm(`Substituir a ficha das outras ${others} conversas de ${S.cur.name}.json por esta?`, { ok: 'Substituir', danger: true })) return;
-        S.cur.data.forEach(cv => { if (cv === conv) return; const sys = cv.find(x => x.role === 'system'); if (sys) { const rest = Object.entries(sys).filter(([k]) => k !== 'role' && k !== 'character'); for (const k of Object.keys(sys)) delete sys[k]; sys.role = 'system'; sys.character = m.character || ''; for (const [k, v] of rest) sys[k] = v; } });
-        touch(); refreshDerived(); renderEditor(); toast('Ficha aplicada.');
+      btn('Salvar como padrão compartilhado', async () => {
+        if (!await askConfirm('Gravar esta system (ficha, catálogo e tools) como padrão de TODOS os datasets? Ela fica em character/ e entra no treino na hora de gerar os dados.', { ok: 'Gravar', danger: true })) return;
+        const sig = x => JSON.stringify([x.character, x.animation_catalog, x.tools]);
+        const before = sig({ character: S.defaults.character, animation_catalog: S.defaults.catalog, tools: S.defaults.tools });
+        try {
+          const r = await api('PUT', '/api/system', { character: m.character, animation_catalog: m.animation_catalog, tools: m.tools });
+          // conversas abertas que usavam o padrão antigo passam a usar o novo (senão virariam exceções ao salvar)
+          for (const cv of S.cur.data) { const sys = cv.find(x => x.role === 'system'); if (sys && sig(sys) === before) { for (const k of Object.keys(sys)) delete sys[k]; Object.assign(sys, clone(r)); } }
+          S.defaults.character = r.character; S.defaults.catalog = clone(r.animation_catalog); S.defaults.tools = clone(r.tools);
+          refreshDerived(); renderEditor(); toast('Padrão compartilhado gravado em character/.');
+        } catch (e) { toast(e.message, 'err'); }
       })));
   d.open = S.ui.open.has(key);
   autoGrow(ta);
