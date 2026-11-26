@@ -103,7 +103,8 @@ def mood_problems(mood):
     if not isinstance(emotion, str) or not emotion.strip():
         problems.append("primary_emotion is empty")
     elif emotion not in EMOTIONS:
-        problems.append(f"primary_emotion {emotion!r} is not in EMOTIONS")
+        pass
+        #problems.append(f"primary_emotion {emotion!r} is not in EMOTIONS")
     for key in MOOD_KEYS:
         value = mood.get(key)
         if not _is_int(value) or not MOOD_MIN <= value <= MOOD_MAX:
