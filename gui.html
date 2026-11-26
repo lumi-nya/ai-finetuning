@@ -208,16 +208,16 @@ details.fold > summary { cursor: pointer; font-size: 13.5px; color: var(--muted)
 .empty h2 { color: var(--ink); font-size: 18px; margin-bottom: 6px; }
 
 /* conversa */
-#chat-view .pane { display: flex; flex-direction: column; padding-bottom: 0; }
+#chat-view .pane { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; }
 #transcript { flex: 1; min-height: 0; width: 100%; }
-#transcript { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; }
+#transcript { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; overflow-y: auto; overflow-x: hidden; }
 .reply .mood:not(.delta) { padding-bottom: 7px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
 .tpair { display: flex; flex-direction: column; gap: 6px; }
 .reply-tools { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
 .note { font-size: 13px; color: var(--amber); margin-top: 4px; }
 .raw { margin-top: 4px; }
 .raw pre { margin: 6px 0 0; padding: 10px; background: var(--sunk); border-radius: 5px; overflow: auto; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.45 var(--code); }
-#composer { position: sticky; bottom: 0; width: min(100%, 880px); margin: 0 auto; background: var(--paper); padding: 12px 0 20px; display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--line); }
+#composer { flex: none; width: min(100%, 880px); margin: 0 auto; background: var(--paper); padding: 12px 0 20px; display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--line); }
 #composer textarea { min-height: 3em; max-height: 220px; }
 .model-line { display: flex; gap: 8px; align-items: center; font-size: 13.5px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
@@ -1652,8 +1652,7 @@ function renderTranscript() {
     }
     return h('div', { class: 'tpair' }, user, reply);
   }));
-  const pane = box.parentElement;
-  pane.scrollTop = pane.scrollHeight;
+  box.scrollTop = box.scrollHeight;
 }
 async function sendToEditor() {
   const turns = S.chat.turns.filter(t => t.answer);
