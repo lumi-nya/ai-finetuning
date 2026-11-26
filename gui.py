@@ -27,13 +27,19 @@ import time
 import traceback
 import webbrowser
 from collections import Counter
-from prompting import render_prompt
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from prompting import (
+    DEFAULT_MOOD, MOOD_KEYS, MOOD_LEVELS, MOOD_MAX, MOOD_MIN,
+    apply_mood_delta, mood_problems, normalize_mood, render_prompt,
+)
+from session import Session
 
 ROOT = Path(__file__).resolve().parent
 HTML_PATH = ROOT / "gui.html"
 DATASETS_DIR = ROOT / "datasets"
+CHATS_DIR = ROOT / "chats"
 
 DEFAULT_MODEL = "Qwen/Qwen3-1.7B-Base"
 DEFAULT_ADAPTER = "qwen-adapter"
@@ -230,6 +236,9 @@ def compute_defaults():
         "tools": tools,
         "emotions": sorted(e for e in emotions if e),
         "agent_id": agents.most_common(1)[0][0] if agents else "Lisa",
+        "mood_levels": [{"key": k, "label": label} for k, label in MOOD_LEVELS],
+        "mood_range": [MOOD_MIN, MOOD_MAX],
+        "default_mood": DEFAULT_MOOD,
     }
 
 
@@ -266,7 +275,7 @@ def parse_model_output(text):
         objects.append(obj)
         pos = end
 
-    mood = answer = None
+    answer = None
     tool_calls = []
     extra = []
     stopped_at = None
@@ -275,16 +284,13 @@ def parse_model_output(text):
         if role in ("user", "system", "tool_result"):
             stopped_at = role  # o modelo começou a inventar o que não é dele
             break
-        if role == "tool_call" and mood is None and answer is None:
+        if role == "tool_call" and answer is None:
             tool_calls.append(obj)
-        elif role == "mood" and mood is None and answer is None:
-            mood = obj
         elif role == "answer" and answer is None:
             answer = obj
         else:
             extra.append(obj)
     return {
-        "mood": mood,
         "answer": answer,
         "tool_calls": tool_calls,
         "extra": extra,
@@ -293,9 +299,9 @@ def parse_model_output(text):
     }
 
 
-def build_prompt(context):
+def build_prompt(context, mood=None):
     # Mesmo prompt do treino e de LisaInference.generate (prompting.render_prompt).
-    return render_prompt(context)
+    return render_prompt(context, mood=mood)
 
 
 # --------------------------------------------------------------------------
@@ -305,14 +311,16 @@ def build_prompt(context):
 class MockModel:
     """Substituto sem GPU: devolve algo no formato que o modelo ajustado gera."""
 
-    def generate(self, context, max_new_tokens=256):
+    def generate(self, context, mood=None, max_new_tokens=256):
         time.sleep(0.6)
-        animations = []
+        mood = normalize_mood(mood if mood is not None else DEFAULT_MOOD)
+        animations, tools = [], set()
         for item in context:
             if isinstance(item, dict) and item.get("role") == "system":
                 animations = [
                     a.get("id") for a in item.get("animation_catalog", []) if isinstance(a, dict)
                 ]
+                tools = {t.get("name") for t in item.get("tools", []) if isinstance(t, dict)}
         last_user = next(
             (m.get("text", "") for m in reversed(context) if m.get("role") == "user"), ""
         )
@@ -320,11 +328,8 @@ class MockModel:
         # e ainda não houver tool_result neste turno (testa o ciclo de tools).
         last_user_at = max((i for i, m in enumerate(context) if m.get("role") == "user"), default=-1)
         has_result = any(m.get("role") == "tool_result" for m in context[last_user_at + 1:])
-        tools = set()
-        for item in context:
-            if isinstance(item, dict) and item.get("role") == "system":
-                tools = {t.get("name") for t in item.get("tools", []) if isinstance(t, dict)}
         lowered = last_user.lower()
+        invented = json.dumps({"role": "user", "text": "texto inventado que deve ser descartado"}, ensure_ascii=False)
         if not has_result and ("lembr" in lowered or "remember" in lowered):
             if "mochi" in lowered and "recall_person" in tools:
                 call = {"role": "tool_call", "name": "recall_person", "arguments": {"name": "Mochi"}}
@@ -333,33 +338,35 @@ class MockModel:
             else:
                 call = None
             if call:
-                return json.dumps(call, ensure_ascii=False) + "\n" + json.dumps(
-                    {"role": "user", "text": "texto inventado que deve ser descartado"}, ensure_ascii=False)
+                return json.dumps(call, ensure_ascii=False) + "\n" + invented
+        # O mood de entrada muda a resposta (testa as variáveis e os branches).
+        if mood["patience_level"] <= 3:
+            tone, emotion = "(simulado, impaciente) Fala logo.", "annoyed"
+            delta = {"patience_level": -1, "affection_level": -1}
+        elif mood["trust_level"] <= 3:
+            tone, emotion = "(simulado, desconfiada) Hm, vou ouvir.", "guarded"
+            delta = {"trust_level": 0, "curiosity_level": 1}
+        elif mood["curiosity_level"] >= 8:
+            tone, emotion = "(simulado, curiosa) Conta mais!", "curious"
+            delta = {"curiosity_level": 1, "energy_level": 1}
+        elif mood["affection_level"] >= 8:
+            tone, emotion = "(simulado, carinhosa) Que bom te ver.", "tender"
+            delta = {"affection_level": 1, "comfort_level": 1}
+        else:
+            tone, emotion = "(simulado) Isto é só o modo de teste.", "amused"
+            delta = {"energy_level": 1}
         timeline = []
         if animations:
             timeline.append(
                 {"event_role": "action", "animation_id": animations[0], "blend_weight": 0.85}
             )
         timeline.append({"event_role": "speech", "text": f"(simulado) Você disse: {last_user[:60]}"})
-        timeline.append({"event_role": "speech", "text": "Isto é só o modo de teste."})
-        mood = {
-            "role": "mood",
-            "primary_emotion": "curious",
-            "shyness_level": 3,
-            "comfort_level": 7,
-            "distraction_level": 2,
-            "energy_level": 6,
-        }
-        mood_delta = {
-            "primary_emotion": "amused",
-            "shyness_level": -1,
-            "comfort_level": 1,
-            "distraction_level": 0,
-            "energy_level": 2,
-        }
+        timeline.append({"event_role": "speech", "text": tone})
+        mood_delta = {"primary_emotion": emotion}
+        for key in MOOD_KEYS:
+            mood_delta[key] = delta.get(key, 0)
         answer = {"role": "answer", "agent_id": "Lisa", "timeline": timeline, "mood_delta": mood_delta}
-        invented = {"role": "user", "text": "texto inventado que deve ser descartado"}
-        return "\n".join(json.dumps(o, ensure_ascii=False) for o in (mood, answer, invented))
+        return "\n".join((json.dumps(answer, ensure_ascii=False), invented))
 
 
 class ModelManager:
@@ -424,14 +431,14 @@ class ModelManager:
                 self.state = "error"
                 self.error = f"{type(error).__name__}: {error}"
 
-    def generate(self, context, max_new_tokens):
+    def generate(self, context, mood, max_new_tokens):
         with self.lock:
             model, state = self.model, self.state
         if state != "ready" or model is None:
             raise ApiError(409, "O modelo ainda não está carregado.")
         with self.gen_lock:
             started = time.time()
-            raw = model.generate(context, max_new_tokens=max_new_tokens)
+            raw = model.generate(context, mood=mood, max_new_tokens=max_new_tokens)
             return raw, time.time() - started
 
 
@@ -447,10 +454,76 @@ def chat_api(body):
     except (TypeError, ValueError):
         raise ApiError(400, "max_new_tokens precisa ser um número.")
     max_new_tokens = max(16, min(1024, max_new_tokens))
-    raw, seconds = MODEL.generate(context, max_new_tokens)
+    mood = body.get("mood")
+    if mood is None:
+        mood = DEFAULT_MOOD
+    problems = mood_problems(mood) if isinstance(mood, dict) else ["o mood precisa ser um objeto."]
+    if problems:
+        raise ApiError(400, "Mood inválido: " + "; ".join(problems))
+    mood = normalize_mood(mood)
+    raw, seconds = MODEL.generate(context, mood, max_new_tokens)
     result = parse_model_output(raw)
-    result.update({"raw": raw, "seconds": round(seconds, 2), "prompt": build_prompt(context)})
+    # O programa (não o modelo) aplica o mood_delta: o mood novo vai no fim do próximo prompt.
+    answer = result["answer"]
+    result["mood_after"] = apply_mood_delta(mood, answer.get("mood_delta")) if answer else mood
+    result.update({"raw": raw, "seconds": round(seconds, 2), "prompt": build_prompt(context, mood)})
     return result
+
+
+# --------------------------------------------------------------------------
+# Conversas salvas (contexto + mood à parte, no mesmo arquivo; fora dos datasets)
+# --------------------------------------------------------------------------
+
+def chat_path(name):
+    if not isinstance(name, str) or not NAME_RE.match(name):
+        raise ApiError(400, "Nome inválido. Use letras, números, '-' e '_' (máx. 64).")
+    return CHATS_DIR / f"{name}.json"
+
+
+def list_chats():
+    CHATS_DIR.mkdir(exist_ok=True)
+    items = []
+    for path in sorted(CHATS_DIR.glob("*.json")):
+        if not NAME_RE.match(path.stem):
+            continue
+        entry = {"name": path.stem, "size": path.stat().st_size, "modified": int(path.stat().st_mtime)}
+        try:
+            session = Session.load(path)
+            entry["messages"] = sum(1 for m in session.messages if m.get("role") in ("user", "answer"))
+            entry["emotion"] = session.mood["primary_emotion"]
+        except (OSError, ValueError) as error:
+            entry["error"] = str(error)
+        items.append(entry)
+    return items
+
+
+def load_chat_api(name):
+    path = chat_path(name)
+    if not path.is_file():
+        raise ApiError(404, f"Conversa não encontrada: chats/{name}.json")
+    try:
+        session = Session.load(path)
+    except (OSError, ValueError) as error:
+        raise ApiError(422, f"Não consegui ler chats/{name}.json: {error}")
+    return {"name": name, **session.to_dict()}
+
+
+def save_chat_api(name, body):
+    path = chat_path(name)
+    context, mood = body.get("context"), body.get("mood")
+    if isinstance(mood, dict):
+        problems = mood_problems(mood)
+        if problems:
+            raise ApiError(400, "Mood inválido: " + "; ".join(problems))
+    elif mood is not None:
+        raise ApiError(400, "O mood precisa ser um objeto.")
+    try:
+        session = Session.from_dict({"context": context, "mood": mood})
+        normalize_for_save([session.messages])
+        session.save(path)
+    except ValueError as error:
+        raise ApiError(400, str(error))
+    return {"name": name, "size": path.stat().st_size}
 
 
 # --------------------------------------------------------------------------
@@ -545,6 +618,14 @@ class Handler(BaseHTTPRequestHandler):
                 return load_dataset_api(name)
             if method == "PUT":
                 return save_dataset_api(name, self._read_json())
+        if method == "GET" and path == "/api/chats":
+            return {"chats": list_chats()}
+        if path.startswith("/api/chats/"):
+            name = path[len("/api/chats/"):]
+            if method == "GET":
+                return load_chat_api(name)
+            if method == "PUT":
+                return save_chat_api(name, self._read_json())
         if method == "GET" and path == "/api/model":
             return MODEL.status()
         if method == "POST" and path == "/api/model/load":

@@ -82,11 +82,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "hurt",
-            "shyness_level": 5,
-            "comfort_level": 3,
-            "distraction_level": 1,
-            "energy_level": 3
+            "primary_emotion": "calm",
+            "shyness_level": 3,
+            "comfort_level": 7,
+            "distraction_level": 2,
+            "energy_level": 5,
+            "patience_level": 5,
+            "curiosity_level": 3,
+            "affection_level": 7,
+            "trust_level": 5
         },
         {
             "role": "answer",
@@ -111,7 +115,11 @@
                 "shyness_level": 2,
                 "comfort_level": -4,
                 "distraction_level": -1,
-                "energy_level": -2
+                "energy_level": -2,
+                "patience_level": -1,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": -2
             }
         }
     ],
@@ -197,6 +205,18 @@
             "text": "Come on, give me a kiss. Don't be shy."
         },
         {
+            "role": "mood",
+            "primary_emotion": "calm",
+            "shyness_level": 3,
+            "comfort_level": 7,
+            "distraction_level": 3,
+            "energy_level": 5,
+            "patience_level": 6,
+            "curiosity_level": 6,
+            "affection_level": 5,
+            "trust_level": 5
+        },
+        {
             "role": "answer",
             "agent_id": "Lisa",
             "timeline": [
@@ -219,7 +239,11 @@
                 "shyness_level": 2,
                 "comfort_level": -2,
                 "distraction_level": 0,
-                "energy_level": 0
+                "energy_level": 0,
+                "patience_level": -1,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": -1
             }
         },
         {
@@ -228,11 +252,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "angry",
-            "shyness_level": 3,
-            "comfort_level": 1,
-            "distraction_level": 0,
-            "energy_level": 3
+            "primary_emotion": "uncomfortable",
+            "shyness_level": 5,
+            "comfort_level": 5,
+            "distraction_level": 3,
+            "energy_level": 5,
+            "patience_level": 5,
+            "curiosity_level": 6,
+            "affection_level": 4,
+            "trust_level": 4
         },
         {
             "role": "answer",
@@ -257,7 +285,11 @@
                 "shyness_level": -1,
                 "comfort_level": -3,
                 "distraction_level": -1,
-                "energy_level": 0
+                "energy_level": 0,
+                "patience_level": -2,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": -1
             }
         }
     ],
@@ -344,11 +376,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "hurt",
-            "shyness_level": 5,
-            "comfort_level": 3,
-            "distraction_level": 1,
-            "energy_level": 3
+            "primary_emotion": "calm",
+            "shyness_level": 3,
+            "comfort_level": 6,
+            "distraction_level": 2,
+            "energy_level": 5,
+            "patience_level": 5,
+            "curiosity_level": 3,
+            "affection_level": 7,
+            "trust_level": 5
         },
         {
             "role": "answer",
@@ -373,7 +409,11 @@
                 "shyness_level": 2,
                 "comfort_level": -3,
                 "distraction_level": -1,
-                "energy_level": -2
+                "energy_level": -2,
+                "patience_level": -1,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": -2
             }
         }
     ],
@@ -460,11 +500,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "hurt",
-            "shyness_level": 5,
-            "comfort_level": 3,
-            "distraction_level": 1,
-            "energy_level": 3
+            "primary_emotion": "calm",
+            "shyness_level": 3,
+            "comfort_level": 6,
+            "distraction_level": 2,
+            "energy_level": 5,
+            "patience_level": 5,
+            "curiosity_level": 3,
+            "affection_level": 7,
+            "trust_level": 5
         },
         {
             "role": "answer",
@@ -489,7 +533,11 @@
                 "shyness_level": 2,
                 "comfort_level": -3,
                 "distraction_level": -1,
-                "energy_level": -2
+                "energy_level": -2,
+                "patience_level": -1,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": -2
             }
         },
         {
@@ -498,11 +546,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "hesitant_forgiving",
+            "primary_emotion": "hurt",
             "shyness_level": 5,
-            "comfort_level": 5,
+            "comfort_level": 3,
             "distraction_level": 1,
-            "energy_level": 3
+            "energy_level": 3,
+            "patience_level": 4,
+            "curiosity_level": 3,
+            "affection_level": 6,
+            "trust_level": 3
         },
         {
             "role": "answer",
@@ -527,7 +579,11 @@
                 "shyness_level": 0,
                 "comfort_level": 2,
                 "distraction_level": 0,
-                "energy_level": 0
+                "energy_level": 0,
+                "patience_level": 1,
+                "curiosity_level": 0,
+                "affection_level": 1,
+                "trust_level": 1
             }
         }
     ],
@@ -614,11 +670,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "uncomfortable",
-            "shyness_level": 4,
-            "comfort_level": 3,
-            "distraction_level": 1,
-            "energy_level": 4
+            "primary_emotion": "calm",
+            "shyness_level": 2,
+            "comfort_level": 6,
+            "distraction_level": 2,
+            "energy_level": 5,
+            "patience_level": 5,
+            "curiosity_level": 4,
+            "affection_level": 4,
+            "trust_level": 4
         },
         {
             "role": "answer",
@@ -643,7 +703,11 @@
                 "shyness_level": 2,
                 "comfort_level": -3,
                 "distraction_level": -1,
-                "energy_level": -1
+                "energy_level": -1,
+                "patience_level": -1,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": -1
             }
         }
     ],
@@ -730,11 +794,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "annoyed",
-            "shyness_level": 3,
-            "comfort_level": 4,
-            "distraction_level": 1,
-            "energy_level": 4
+            "primary_emotion": "calm",
+            "shyness_level": 2,
+            "comfort_level": 6,
+            "distraction_level": 2,
+            "energy_level": 5,
+            "patience_level": 5,
+            "curiosity_level": 4,
+            "affection_level": 5,
+            "trust_level": 5
         },
         {
             "role": "answer",
@@ -759,7 +827,11 @@
                 "shyness_level": 1,
                 "comfort_level": -2,
                 "distraction_level": -1,
-                "energy_level": -1
+                "energy_level": -1,
+                "patience_level": -2,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": 0
             }
         }
     ],
@@ -846,11 +918,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "angry",
+            "primary_emotion": "calm",
             "shyness_level": 2,
-            "comfort_level": 4,
-            "distraction_level": 0,
-            "energy_level": 6
+            "comfort_level": 6,
+            "distraction_level": 1,
+            "energy_level": 5,
+            "patience_level": 4,
+            "curiosity_level": 3,
+            "affection_level": 4,
+            "trust_level": 4
         },
         {
             "role": "answer",
@@ -859,7 +935,7 @@
                 {
                     "event_role": "action",
                     "animation_id": "facial_pout",
-                    "blend_weight": 1
+                    "blend_weight": 1.0
                 },
                 {
                     "event_role": "speech",
@@ -875,7 +951,11 @@
                 "shyness_level": 0,
                 "comfort_level": -2,
                 "distraction_level": -1,
-                "energy_level": 1
+                "energy_level": 1,
+                "patience_level": -2,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": -1
             }
         }
     ],
@@ -962,11 +1042,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "withdrawn",
-            "shyness_level": 5,
-            "comfort_level": 3,
+            "primary_emotion": "calm",
+            "shyness_level": 3,
+            "comfort_level": 4,
             "distraction_level": 1,
-            "energy_level": 2
+            "energy_level": 3,
+            "patience_level": 5,
+            "curiosity_level": 4,
+            "affection_level": 4,
+            "trust_level": 4
         },
         {
             "role": "answer",
@@ -991,7 +1075,11 @@
                 "shyness_level": 2,
                 "comfort_level": -1,
                 "distraction_level": 0,
-                "energy_level": -1
+                "energy_level": -1,
+                "patience_level": -1,
+                "curiosity_level": -1,
+                "affection_level": 0,
+                "trust_level": -1
             }
         }
     ],
@@ -1078,11 +1166,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "irritated",
+            "primary_emotion": "calm",
             "shyness_level": 2,
-            "comfort_level": 4,
+            "comfort_level": 6,
             "distraction_level": 1,
-            "energy_level": 5
+            "energy_level": 5,
+            "patience_level": 5,
+            "curiosity_level": 4,
+            "affection_level": 5,
+            "trust_level": 5
         },
         {
             "role": "answer",
@@ -1107,7 +1199,11 @@
                 "shyness_level": 0,
                 "comfort_level": -2,
                 "distraction_level": 0,
-                "energy_level": 0
+                "energy_level": 0,
+                "patience_level": -2,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": 0
             }
         }
     ],
@@ -1194,11 +1290,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "hurt",
-            "shyness_level": 4,
-            "comfort_level": 4,
-            "distraction_level": 1,
-            "energy_level": 3
+            "primary_emotion": "calm",
+            "shyness_level": 3,
+            "comfort_level": 6,
+            "distraction_level": 2,
+            "energy_level": 5,
+            "patience_level": 5,
+            "curiosity_level": 3,
+            "affection_level": 7,
+            "trust_level": 5
         },
         {
             "role": "answer",
@@ -1223,7 +1323,11 @@
                 "shyness_level": 1,
                 "comfort_level": -2,
                 "distraction_level": -1,
-                "energy_level": -2
+                "energy_level": -2,
+                "patience_level": -1,
+                "curiosity_level": 0,
+                "affection_level": -1,
+                "trust_level": -2
             }
         }
     ]

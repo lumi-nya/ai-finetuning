@@ -364,17 +364,34 @@ const S = {
   mode: 'datasets',
   files: [], cur: null, sel: -1, filter: '',
   convIssues: [],
-  defaults: { catalog: [], tools: [], emotions: [], agent_id: 'Lisa' },
+  defaults: { catalog: [], tools: [], emotions: [], agent_id: 'Lisa', default_mood: null },
   ui: { open: new Set() },
   model: { state: 'idle', error: null, mock: false, model: '', adapter: '' },
-  chat: { catalog: null, memoryOn: false, memory: null, turns: [], maxTokens: 256, busy: false },
+  chat: { catalog: null, memoryOn: false, memory: null, turns: [], maxTokens: 256, busy: false, mood: null },
 };
 const editing = new WeakSet(); // mood/answer abertos para edição
 const drafts = new Map(); // objeto -> {chave: {text, error}}  (JSON ainda inválido)
 
 const ROLE_LABEL = { system: 'Sistema', memory: 'Memória', user: 'Usuário', mood: 'Humor', answer: 'Resposta', branch: 'Ramo', tool_call: 'Tool call', tool_result: 'Resultado' };
 const branchSel = new WeakMap(); // mensagem 'user' -> ramo exibido (0 = principal)
-const LEVELS = [['shyness_level', 'Timidez'], ['comfort_level', 'Conforto'], ['distraction_level', 'Distração'], ['energy_level', 'Energia']];
+// Variáveis de mood (a lista oficial vem do servidor, de prompting.MOOD_LEVELS; as quatro últimas dependem do personagem).
+let LEVELS = [['shyness_level', 'Timidez'], ['comfort_level', 'Conforto'], ['distraction_level', 'Distração'], ['energy_level', 'Energia'],
+  ['patience_level', 'Paciência'], ['curiosity_level', 'Curiosidade'], ['affection_level', 'Afeto'], ['trust_level', 'Confiança']];
+const FALLBACK_MOOD = { role: 'mood', primary_emotion: 'calm', shyness_level: 3, comfort_level: 7, distraction_level: 3, energy_level: 5, patience_level: 6, curiosity_level: 6, affection_level: 5, trust_level: 5 };
+const defaultMood = () => clone(S.defaults.default_mood || FALLBACK_MOOD);
+// Mesma regra de prompting.apply_mood_delta: níveis de 0 a 10, a emoção passa a ser a do delta.
+function applyDelta(mood, delta) {
+  const out = { role: 'mood', primary_emotion: mood.primary_emotion };
+  const d = delta && typeof delta === 'object' ? delta : {};
+  if (typeof d.primary_emotion === 'string' && d.primary_emotion.trim()) out.primary_emotion = d.primary_emotion;
+  for (const [k] of LEVELS) out[k] = clamp((Number(mood[k]) || 0) + (Number.isInteger(d[k]) ? d[k] : 0), 0, 10);
+  return out;
+}
+function moodDiff(a, b) {
+  const keys = LEVELS.map(([k]) => k).filter(k => a[k] !== b[k]);
+  if (a.primary_emotion !== b.primary_emotion) keys.unshift('primary_emotion');
+  return keys;
+}
 
 // A ordem das chaves é a que o modelo viu no treino; nunca reordene.
 const mk = {
@@ -388,9 +405,9 @@ const mk = {
   toolResult: (name = '', content = {}) => ({ role: 'tool_result', name, content }),
   memory: () => ({ role: 'memory', summary: '', key_facts: {} }),
   user: (text = '') => ({ role: 'user', text }),
-  mood: () => ({ role: 'mood', primary_emotion: '', shyness_level: 5, comfort_level: 5, distraction_level: 3, energy_level: 5 }),
+  mood: () => defaultMood(),
   answer: () => ({ role: 'answer', agent_id: S.defaults.agent_id || 'Lisa', timeline: [mk.speech()], mood_delta: mk.delta() }),
-  delta: () => ({ primary_emotion: '', shyness_level: 0, comfort_level: 0, distraction_level: 0, energy_level: 0 }),
+  delta: () => Object.fromEntries([['primary_emotion', ''], ...LEVELS.map(([k]) => [k, 0])]),
   speech: (text = '') => ({ event_role: 'speech', text }),
   action: (id = '', w = 0.8) => ({ event_role: 'action', animation_id: id, blend_weight: w }),
   anim: () => ({ id: '', description: '', category: 'idle', layer: 'body', tags: [] }),
@@ -433,7 +450,7 @@ function validateConv(conv) {
   if (systems.length > 1) add('warn', 'Há mais de uma mensagem system.');
   if (systems.length && conv[0].role !== 'system') add('warn', 'A mensagem system deveria ser a primeira.');
 
-  let turn = 0, hasMood = false, hasAnswer = true, lastUserIdx = -1, branchCount = 0, turnEmos = [];
+  let turn = 0, hasMood = false, hasAnswer = true, lastUserIdx = -1, branchCount = 0, mainMood = null, prevIn = null, prevAns = null, curIn = null, curAns = null;
   const checkMood = (m, i, tag) => {
     if (typeof m.primary_emotion !== 'string' || !m.primary_emotion.trim()) add('warn', `${tag}: primary_emotion vazio.`, i);
     for (const [k] of LEVELS) {
@@ -495,12 +512,13 @@ function validateConv(conv) {
         if (typeof m.summary !== 'string' || !m.summary.trim()) add('warn', 'Memória sem summary.', i);
         break;
       case 'user':
-        closeTurn(); turn++; hasMood = false; hasAnswer = false; lastUserIdx = i; branchCount = 0; turnEmos = [];
+        closeTurn(); turn++; hasMood = false; hasAnswer = false; lastUserIdx = i; branchCount = 0; mainMood = null; prevIn = curIn; prevAns = curAns; curIn = curAns = null;
         if (typeof m.text !== 'string' || !m.text.trim()) add('warn', `Turno ${turn}: mensagem do usuário vazia.`, i);
         break;
       case 'tool_call': {
         if (!turn) { add('warn', 'Tool call antes de qualquer mensagem do usuário.', i); break; }
-        if (hasMood || hasAnswer) add('warn', `Turno ${turn}: o tool call deveria vir antes do mood e da resposta.`, i);
+        if (!hasMood) add('warn', `Turno ${turn}: o humor de entrada deveria vir logo depois da mensagem do usuário, antes do tool call.`, i);
+        if (hasAnswer) add('warn', `Turno ${turn}: o tool call deveria vir antes da resposta.`, i);
         const tl = toolsList.find(t => t && t.name === m.name);
         if (typeof m.name !== 'string' || !m.name.trim()) add('warn', `Turno ${turn}: tool call sem name.`, i);
         else if (!toolSet.has(m.name)) add('error', `Turno ${turn}: a tool "${m.name}" não está listada em tools no system.`, i);
@@ -520,15 +538,21 @@ function validateConv(conv) {
         break;
       }
       case 'mood':
-        if (pending.length) add('warn', `Turno ${turn}: o mood veio antes do resultado da tool.`, i);
-        hasMood = true;
-        turnEmos = [m.primary_emotion];
+        if (!turn) { add('warn', 'Mood antes de qualquer mensagem do usuário.', i); break; }
+        if (hasMood) add('warn', `Turno ${turn}: há mais de um mood neste turno (use um ramo para outro humor).`, i);
+        else if (pending.length || hasAnswer || conv.slice(lastUserIdx + 1, i).some(x => x.role === 'tool_call' || x.role === 'tool_result' || x.role === 'answer')) add('warn', `Turno ${turn}: o mood é a entrada do modelo e deveria vir logo depois da mensagem do usuário.`, i);
+        hasMood = true; mainMood = m; curIn = m;
         checkMood(m, i, `Turno ${turn}`);
+        if (prevIn && prevAns && prevAns.mood_delta && typeof prevAns.mood_delta === 'object' && typeof m === 'object') {
+          const diff = moodDiff(m, applyDelta(prevIn, prevAns.mood_delta));
+          if (diff.length) add('warn', `Turno ${turn}: o humor de entrada não bate com o turno anterior (humor anterior + mood_delta). Difere em: ${diff.join(', ')}. Use "Recalcular encadeamento".`, i);
+        }
         break;
       case 'answer':
         hasAnswer = true;
+        if (!curAns) curAns = m;
         if (!turn) add('warn', 'Resposta antes de qualquer mensagem do usuário.', i);
-        else if (!hasMood) add('warn', `Turno ${turn}: resposta sem 'mood' antes dela.`, i);
+        else if (!hasMood) add('warn', `Turno ${turn}: resposta sem o mood de entrada antes dela.`, i);
         checkAnswer(m, i, `Turno ${turn}`);
         break;
       case 'branch': {
@@ -539,9 +563,7 @@ function validateConv(conv) {
         if (!m.mood || typeof m.mood !== 'object' || m.mood.role !== 'mood') add('warn', `${tag}: falta o objeto 'mood' (com role "mood").`, i);
         else {
           checkMood(m.mood, i, tag);
-          const emo = typeof m.mood.primary_emotion === 'string' ? m.mood.primary_emotion.trim() : '';
-          if (emo && turnEmos.some(x => typeof x === 'string' && x.trim() === emo)) add('warn', `${tag}: a emoção "${emo}" já aparece em outro ramo deste turno.`, i);
-          turnEmos.push(emo);
+          if (mainMood && !moodDiff(m.mood, mainMood).length) add('warn', `${tag}: o humor de entrada é igual ao da resposta principal; o ramo precisa de um humor diferente.`, i);
         }
         if (!m.answer || typeof m.answer !== 'object' || m.answer.role !== 'answer') add('warn', `${tag}: falta o objeto 'answer' (com role "answer").`, i);
         else checkAnswer(m.answer, i, tag);
@@ -697,8 +719,34 @@ function renderConvList() {
   });
   list.replaceChildren(...(items.length ? items : [h('p', { class: 'muted small' }, q ? 'Nenhuma conversa encontrada.' : 'Nenhuma conversa ainda.')]));
 }
-function newTurn() {
-  const mood = mk.mood(), answer = mk.answer();
+function chainedMood(conv) {
+  // Humor de entrada do próximo turno: o do último turno + o mood_delta da resposta dele.
+  let ui = -1;
+  conv.forEach((x, j) => { if (x.role === 'user') ui = j; });
+  if (ui < 0) return defaultMood();
+  const seg = conv.slice(ui + 1);
+  const m = seg.find(x => x.role === 'mood'), a = seg.find(x => x.role === 'answer');
+  return m && a ? applyDelta(m, a.mood_delta) : defaultMood();
+}
+function recomputeChain(conv) {
+  let prev = null, prevAns = null, n = 0;
+  for (let i = 0; i < conv.length; i++) {
+    if (conv[i].role !== 'user') continue;
+    let end = i + 1;
+    while (end < conv.length && conv[end].role !== 'user') end++;
+    const seg = conv.slice(i + 1, end);
+    const m = seg.find(x => x.role === 'mood'), a = seg.find(x => x.role === 'answer');
+    if (m && prev && prevAns) {
+      const want = applyDelta(prev, prevAns.mood_delta);
+      if (moodDiff(m, want).length) { for (const k of Object.keys(m)) delete m[k]; Object.assign(m, want); n++; }
+    }
+    if (m && a) { prev = m; prevAns = a; }
+    i = end - 1;
+  }
+  return n;
+}
+function newTurn(conv) {
+  const mood = conv ? chainedMood(conv) : mk.mood(), answer = mk.answer();
   editing.add(mood); editing.add(answer);
   return [mk.user(), mood, answer];
 }
@@ -846,13 +894,20 @@ function refreshBranchBars() {
     if (conv[ui] && conv[ui].role === 'user') el.replaceWith(buildBranchBar(conv, ui));
   });
 }
+function branchLabel(main, m) {
+  const emo = emotionOf(m);
+  if (!main || !m) return emo;
+  let best = null;
+  for (const [k, label] of LEVELS) { const d = Math.abs((Number(m[k]) || 0) - (Number(main[k]) || 0)); if (d && (!best || d > best.d)) best = { d, label, v: m[k] }; }
+  return best ? `${emo} · ${best.label} ${best.v}` : emo;
+}
 function emotionOf(m) { return m && typeof m.primary_emotion === 'string' && m.primary_emotion.trim() ? m.primary_emotion.trim() : '(sem emoção)'; }
 function branchBar(conv, ui, end, branches, active) {
   const user = conv[ui];
   const seg = conv.slice(ui + 1, end);
   const pm = conv.findIndex((x, j) => j > ui && j < end && x.role === 'mood');
   const pa = conv.findIndex((x, j) => j > ui && j < end && x.role === 'answer');
-  const options = [{ label: emotionOf(pm >= 0 ? conv[pm] : null) }, ...branches.map(j => ({ label: emotionOf(conv[j].mood) }))];
+  const options = [{ label: emotionOf(pm >= 0 ? conv[pm] : null) }, ...branches.map(j => ({ label: branchLabel(pm >= 0 ? conv[pm] : null, conv[j].mood) }))];
   const show = k => {
     branchSel.set(user, k); renderEditor();
     const el = $(`#msgs [data-user="${ui}"]`); if (el) el.scrollIntoView({ block: 'nearest' });
@@ -872,7 +927,7 @@ function branchBar(conv, ui, end, branches, active) {
     branchSel.set(user, branches.length + 1);
     touch(); refreshDerived(); renderEditor();
     const el = $(`#msgs [data-user="${ui}"]`); if (el) el.scrollIntoView({ block: 'nearest' });
-    toast('Ramo criado como cópia do que estava na tela. Troque o humor e ajuste a resposta.');
+    toast('Ramo criado como cópia do que estava na tela. Troque o humor de entrada (ex.: confiança ou paciência) e ajuste a resposta.');
   };
   const addTool = () => {
     const name = toolNames(conv)[0] || '';
@@ -881,7 +936,7 @@ function branchBar(conv, ui, end, branches, active) {
     if (tool && tool.parameters && typeof tool.parameters === 'object') for (const k of Object.keys(tool.parameters)) args[k] = '';
     const call = mk.toolCall(name, args), result = mk.toolResult(name, {});
     editing.add(call); editing.add(result);
-    let at = conv.findIndex((x, j) => j > ui && j < end && (x.role === 'mood' || x.role === 'answer'));
+    let at = conv.findIndex((x, j) => j > ui && j < end && x.role === 'answer');
     if (at < 0) at = end;
     conv.splice(at, 0, call, result);
     touch(); refreshDerived(); renderEditor();
@@ -931,7 +986,7 @@ function msgBlock(conv, i, m, opts = {}) {
     m.role === 'answer' ? h('span', { class: 'avatar', 'aria-hidden': 'true' }, 'L') : (m.role === 'mood' || m.role === 'tool_call') ? h('span', { class: 'avatar ghost', 'aria-hidden': 'true' }) : null,
     h('div', { class: 'bubble' },
       h('div', { class: 'msg-h' },
-        h('h3', null, (m.role === 'mood' ? 'Humor da Lisa' : m.role === 'answer' ? 'Lisa' : m.role === 'tool_call' ? 'Lisa chama uma tool' : m.role === 'tool_result' ? 'Resultado da tool' : ROLE_LABEL[m.role] || `Papel "${m.role}"`) + (opts.tag ? ` · ${opts.tag}` : '')),
+        h('h3', null, (m.role === 'mood' ? 'Humor de entrada' : m.role === 'answer' ? 'Lisa' : m.role === 'tool_call' ? 'Lisa chama uma tool' : m.role === 'tool_result' ? 'Resultado da tool' : ROLE_LABEL[m.role] || `Papel "${m.role}"`) + (opts.tag ? ` · ${opts.tag}` : '')),
         h('div', { class: 'msg-tools' },
           editable ? iconBtn(isEdit ? 'check' : 'edit', isEdit ? 'Concluir edição' : 'Editar', () => {
             if (isEdit) editing.delete(m); else editing.add(m);
@@ -952,9 +1007,14 @@ function addBar(conv) {
       if (!role) return;
       { const nm = mk[role](); if (role !== 'user') editing.add(nm); conv.push(nm); } touch(); refreshDerived(); renderEditor();
     },
-  }, h('option', { value: '' }, 'Mensagem avulsa…'), h('option', { value: 'user' }, 'Usuário'), h('option', { value: 'mood' }, 'Humor'), h('option', { value: 'answer' }, 'Resposta'));
+  }, h('option', { value: '' }, 'Mensagem avulsa…'), h('option', { value: 'user' }, 'Usuário'), h('option', { value: 'mood' }, 'Humor de entrada'), h('option', { value: 'answer' }, 'Resposta'));
   return h('div', { class: 'add-bar' },
-    btn('Adicionar turno', () => { conv.push(...newTurn()); touch(); refreshDerived(); renderEditor(); }, 'primary'),
+    btn('Adicionar turno', () => { conv.push(...newTurn(conv)); touch(); refreshDerived(); renderEditor(); }, 'primary'),
+    btn('Recalcular encadeamento dos moods', () => {
+      const n = recomputeChain(conv);
+      if (n) { touch(); refreshDerived(); renderEditor(); }
+      toast(n ? `${n} humor(es) de entrada atualizado(s): humor anterior + mood_delta.` : 'O encadeamento já está consistente.');
+    }),
     hasMemory ? null : btn('Adicionar memória', () => {
       const at = conv.findIndex(m => m.role === 'system') + 1;
       conv.splice(at, 0, mk.memory()); touch(); refreshDerived(); renderEditor();
@@ -1101,13 +1161,13 @@ function moodEditor(conv, m) {
     const out = h('b', null, String(m[k] ?? 5));
     const input = h('input', {
       type: 'range', min: 0, max: 10, step: 1, value: m[k] ?? 5, 'aria-label': label,
-      oninput: () => { m[k] = parseInt(input.value, 10); out.textContent = input.value; touch(); },
+      oninput: () => { m[k] = parseInt(input.value, 10); out.textContent = input.value; touch(); refreshDerived(); },
     });
     return h('label', { class: 'lvl' }, h('span', null, label), out, input);
   };
   return h('div', null,
-    h('label', { class: 'field' }, h('span', null, 'Emoção principal'),
-      h('input', { type: 'text', list: 'dl-emo', value: m.primary_emotion ?? '', oninput: e => { m.primary_emotion = e.target.value; touch(); } })),
+    h('label', { class: 'field' }, h('span', null, 'Emoção principal (entrada)'),
+      h('input', { type: 'text', list: 'dl-emo', value: m.primary_emotion ?? '', oninput: e => { m.primary_emotion = e.target.value; touch(); refreshDerived(); } })),
     h('div', { class: 'lvls' }, LEVELS.map(level)));
 }
 function answerEditor(conv, m) {
@@ -1308,8 +1368,15 @@ function buildChatSide() {
     h('h2', { class: 'side-h' }, 'Geração'),
     h('label', { class: 'field' }, h('span', null, 'Máximo de tokens novos'),
       h('input', { type: 'number', min: 16, max: 1024, step: 16, value: S.chat.maxTokens, oninput: e => { S.chat.maxTokens = parseInt(e.target.value, 10) || 256; } })),
+    h('h2', { class: 'side-h' }, 'Humor atual'),
+    h('p', { class: 'small muted' }, 'O programa aplica o mood_delta depois de cada resposta e envia só o humor novo, no fim do prompt. Você pode ajustar à mão.'),
+    h('div', { id: 'mood-panel' }),
     h('h2', { class: 'side-h' }, 'Conversa'),
     h('div', { class: 'row' }, btn('Nova conversa', newChat)),
+    h('label', { class: 'field' }, h('span', null, 'Salvar como (contexto + humor, em chats/)'), h('input', { id: 'chat-name', type: 'text', placeholder: 'ex.: lisa-amiga' })),
+    h('div', { class: 'row' }, btn('Salvar conversa', saveChat)),
+    h('label', { class: 'field' }, h('span', null, 'Conversas salvas'), h('select', { id: 'chat-pick' })),
+    h('div', { class: 'row' }, btn('Carregar conversa', loadChat)),
     h('label', { class: 'field' }, h('span', null, 'Adicionar ao dataset'), h('select', { id: 'target' })),
     h('button', { id: 'to-editor', class: 'btn', type: 'button', onclick: sendToEditor }, 'Enviar para o editor'));
   $('#composer').replaceChildren(
@@ -1319,8 +1386,72 @@ function buildChatSide() {
     }),
     h('button', { id: 'send', class: 'btn primary', type: 'button', onclick: sendMessage }, 'Enviar'));
 }
+function renderMoodPanel() {
+  const box = $('#mood-panel'), m = S.chat.mood;
+  if (!box || !m) return;
+  box.replaceChildren(
+    h('label', { class: 'field' }, h('span', null, 'Emoção'),
+      h('input', { type: 'text', list: 'dl-emo', value: m.primary_emotion ?? '', oninput: e => { m.primary_emotion = e.target.value; } })),
+    h('div', { class: 'lvls' }, LEVELS.map(([k, label]) => h('label', { class: 'lvl' }, h('span', null, label),
+      h('input', { type: 'number', min: 0, max: 10, step: 1, value: m[k] ?? 0, 'aria-label': label,
+        oninput: e => { const v = parseInt(e.target.value, 10); if (Number.isInteger(v)) m[k] = clamp(v, 0, 10); } })))),
+    btn('Restaurar humor padrão', () => { S.chat.mood = defaultMood(); renderMoodPanel(); }));
+}
+async function refreshChats() {
+  try {
+    const r = await api('GET', '/api/chats');
+    const sel = $('#chat-pick'), prev = sel.value;
+    sel.replaceChildren(...r.chats.filter(c => !c.error).map(c => h('option', { value: c.name }, `${c.name} (${c.messages} msgs, ${c.emotion})`)));
+    if (prev) sel.value = prev;
+  } catch (e) { /* lista vazia */ }
+}
+function chatContext(withMood) {
+  const c = S.chat, ctx = [clone(c.catalog)];
+  if (c.memoryOn) ctx.push(clone(c.memory));
+  for (const t of c.turns) {
+    if (!t.answer) continue;
+    ctx.push({ role: 'user', text: t.user });
+    if (withMood && t.moodIn) ctx.push(clone(t.moodIn));
+    for (const m of t.tools || []) ctx.push(clone(m));
+    ctx.push(clone(t.answer));
+  }
+  return ctx;
+}
+async function saveChat() {
+  const name = $('#chat-name').value.trim();
+  if (!name) { toast('Dê um nome para a conversa.', 'err'); return; }
+  try {
+    await api('PUT', '/api/chats/' + encodeURIComponent(name), { context: chatContext(false), mood: S.chat.mood });
+    toast(`Conversa salva em chats/${name}.json (o humor vai à parte do contexto).`);
+    await refreshChats(); $('#chat-pick').value = name;
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function loadChat() {
+  const name = $('#chat-pick').value;
+  if (!name) { toast('Não há conversa salva para carregar.', 'err'); return; }
+  try {
+    const r = await api('GET', '/api/chats/' + encodeURIComponent(name));
+    const c = S.chat;
+    c.catalog = r.context.find(m => m.role === 'system') || mk.system(S.defaults.catalog, S.defaults.tools);
+    const mem = r.context.find(m => m.role === 'memory');
+    c.memory = mem || mk.memory(); c.memoryOn = !!mem;
+    c.turns = [];
+    let cur = null;
+    for (const m of r.context) {
+      if (m.role === 'user') { cur = { user: m.text, status: 'ok', tools: [], moodIn: null }; c.turns.push(cur); }
+      else if (cur && (m.role === 'tool_call' || m.role === 'tool_result')) cur.tools.push(m);
+      else if (cur && m.role === 'answer') cur.answer = m;
+    }
+    c.mood = r.mood;
+    $('#chat-cat').replaceChildren(); $('#mem-box').replaceChildren(); $('#mem-on').checked = c.memoryOn; $('#mem-box').hidden = !c.memoryOn;
+    ensureChatContext(); renderMoodPanel(); renderTranscript(); updateComposer();
+    $('#chat-name').value = name;
+    toast(`Conversa carregada: humor atual "${c.mood.primary_emotion}".`);
+  } catch (e) { toast(e.message, 'err'); }
+}
 function ensureChatContext() {
   const c = S.chat;
+  if (!c.mood) c.mood = defaultMood();
   if (!c.catalog) c.catalog = mk.system(S.defaults.catalog, S.defaults.tools);
   if (!c.memory) c.memory = mk.memory();
   if (!$('#chat-cat').firstChild) {
@@ -1401,16 +1532,16 @@ function updateComposer() {
   send.textContent = S.chat.busy ? 'Gerando…' : 'Enviar';
 }
 function enterChat() {
-  ensureChatContext(); updateTargets(); refreshModel(); renderTranscript();
+  ensureChatContext(); updateTargets(); refreshModel(); renderTranscript(); renderMoodPanel(); refreshChats();
 }
-function newChat() { S.chat.turns = []; renderTranscript(); }
+function newChat() { S.chat.turns = []; S.chat.mood = defaultMood(); renderMoodPanel(); renderTranscript(); }
 
 function buildContext() {
+  // Turnos anteriores entram só com user e answer: o mood não vai no contexto
+  // (o programa manda o humor atual no fim do prompt), igual ao prompt de treino.
   const c = S.chat;
   const ctx = [clone(c.catalog)];
   if (c.memoryOn) ctx.push(clone(c.memory));
-  // Turnos anteriores entram só com user e answer: o mood não vai no contexto
-  // (o modelo gera o mood do turno atual), igual ao prompt de treino.
   for (const t of c.turns) {
     if (!t.answer) continue;
     ctx.push({ role: 'user', text: t.user });
@@ -1422,7 +1553,7 @@ async function sendMessage() {
   const ta = $('#input');
   const text = ta.value.trim();
   if (!text || S.chat.busy || S.model.state !== 'ready' || waitingForTool()) return;
-  const turn = { user: text, status: 'pending', tools: [] };
+  const turn = { user: text, status: 'pending', tools: [], moodIn: clone(S.chat.mood) };
   S.chat.turns.push(turn); ta.value = '';
   await runStep(turn);
 }
@@ -1432,19 +1563,21 @@ async function runStep(turn) {
   renderTranscript(); updateComposer();
   try {
     const context = [...buildContext(), { role: 'user', text: turn.user }, ...turn.tools];
-    const r = await api('POST', '/api/chat', { context, max_new_tokens: S.chat.maxTokens });
+    const r = await api('POST', '/api/chat', { context, mood: turn.moodIn, max_new_tokens: S.chat.maxTokens });
     const calls = r.tool_calls || [];
     if (calls.length && !r.answer) {
       if (turn.tools.filter(m => m.role === 'tool_call').length >= 6) { turn.status = 'error'; turn.error = 'O modelo pediu tools demais em sequência; parei por aqui.'; }
       else { turn.status = 'tool'; turn.pending = calls.map(call => ({ call, text: '{"found": false}' })); turn.raw = r.raw; turn.prompt = r.prompt; }
     } else {
       Object.assign(turn, {
-        status: r.answer ? 'ok' : 'partial', raw: r.raw, mood: r.mood, answer: r.answer,
+        status: r.answer ? 'ok' : 'partial', raw: r.raw, answer: r.answer, moodAfter: r.mood_after,
         junk: r.junk, extra: r.extra, stoppedAt: r.stopped_at, prompt: r.prompt, seconds: r.seconds, fresh: true,
       });
     }
   } catch (e) { turn.status = 'error'; turn.error = e.message; }
   S.chat.busy = false;
+  // O programa guarda o humor novo (humor de entrada + mood_delta) para o próximo turno.
+  if (turn.status === 'ok' && turn.moodAfter) { S.chat.mood = turn.moodAfter; renderMoodPanel(); }
   renderTranscript(); updateComposer();
   if (S.mode === 'chat' && turn.status !== 'tool') $('#input').focus();
 }
@@ -1467,6 +1600,7 @@ function retryLast() {
   const last = S.chat.turns[S.chat.turns.length - 1];
   if (!last || S.chat.busy || last.status === 'tool') return;
   S.chat.turns.pop();
+  if (last.moodIn) { S.chat.mood = clone(last.moodIn); renderMoodPanel(); }
   $('#input').value = last.user;
   renderTranscript();
   sendMessage();
@@ -1502,12 +1636,12 @@ function renderTranscript() {
     else {
       const notes = [];
       if (!t.answer) notes.push('O modelo não gerou um objeto "answer" válido. Este turno não entra no contexto das próximas mensagens.');
-      if (!t.mood) notes.push('O modelo não gerou "mood".');
       if (t.stoppedAt) notes.push(`A saída foi cortada onde o modelo começou a inventar uma mensagem "${t.stoppedAt}".`);
       if (t.junk && t.junk.length) notes.push('Parte da saída não era JSON válido (veja a saída bruta).');
       reply = lisa(
         ...exchangeViews(t),
-        t.mood ? moodView(t.mood) : null,
+        t.moodIn ? h('div', { class: 'small muted' }, 'Humor de entrada') : null,
+        t.moodIn ? moodView(t.moodIn) : null,
         t.answer ? bubbleView(t.answer, t.fresh) : null,
         ...notes.map(n => h('p', { class: 'note' }, n)),
         h('details', { class: 'raw' }, h('summary', { class: 'small muted' }, `Saída bruta${t.seconds != null ? ` (${t.seconds}s)` : ''}`),
@@ -1536,8 +1670,8 @@ async function sendToEditor() {
   if (S.chat.memoryOn) conv.push(clone(S.chat.memory));
   for (const t of turns) {
     conv.push({ role: 'user', text: t.user });
+    if (t.moodIn) conv.push(clone(t.moodIn));
     for (const m of t.tools || []) conv.push(clone(m));
-    if (t.mood) conv.push(clone(t.mood));
     conv.push(clone(t.answer));
   }
   S.cur.data.push(conv); S.sel = S.cur.data.length - 1;
@@ -1563,6 +1697,7 @@ async function init() {
     if (defaults) {
       S.defaults = defaults;
       $('#dl-emo').replaceChildren(...defaults.emotions.map(e => h('option', { value: e })));
+      if (Array.isArray(defaults.mood_levels) && defaults.mood_levels.length) LEVELS = defaults.mood_levels.map(x => [x.key, x.label]);
     }
     refreshModel();
     if (S.files.length) await openFile(S.files.find(f => !f.error)?.name || S.files[0].name);

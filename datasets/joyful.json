@@ -82,11 +82,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "excited",
-            "shyness_level": 1,
-            "comfort_level": 10,
-            "distraction_level": 1,
-            "energy_level": 10
+            "primary_emotion": "calm",
+            "shyness_level": 2,
+            "comfort_level": 9,
+            "distraction_level": 2,
+            "energy_level": 8,
+            "patience_level": 6,
+            "curiosity_level": 8,
+            "affection_level": 7,
+            "trust_level": 6
         },
         {
             "role": "answer",
@@ -111,7 +115,11 @@
                 "shyness_level": -1,
                 "comfort_level": 1,
                 "distraction_level": -1,
-                "energy_level": 2
+                "energy_level": 2,
+                "patience_level": 0,
+                "curiosity_level": 1,
+                "affection_level": 1,
+                "trust_level": 1
             }
         }
     ],
@@ -198,11 +206,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "proud",
+            "primary_emotion": "calm",
             "shyness_level": 2,
-            "comfort_level": 9,
+            "comfort_level": 8,
             "distraction_level": 2,
-            "energy_level": 7
+            "energy_level": 6,
+            "patience_level": 7,
+            "curiosity_level": 6,
+            "affection_level": 7,
+            "trust_level": 7
         },
         {
             "role": "answer",
@@ -227,7 +239,11 @@
                 "shyness_level": 0,
                 "comfort_level": 1,
                 "distraction_level": 0,
-                "energy_level": 1
+                "energy_level": 1,
+                "patience_level": 0,
+                "curiosity_level": 0,
+                "affection_level": 1,
+                "trust_level": 1
             }
         }
     ],
@@ -314,11 +330,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "playful",
+            "primary_emotion": "calm",
             "shyness_level": 2,
             "comfort_level": 9,
-            "distraction_level": 2,
-            "energy_level": 7
+            "distraction_level": 3,
+            "energy_level": 6,
+            "patience_level": 7,
+            "curiosity_level": 6,
+            "affection_level": 8,
+            "trust_level": 8
         },
         {
             "role": "answer",
@@ -339,7 +359,11 @@
                 "shyness_level": 0,
                 "comfort_level": 0,
                 "distraction_level": -1,
-                "energy_level": 1
+                "energy_level": 1,
+                "patience_level": 0,
+                "curiosity_level": 2,
+                "affection_level": 0,
+                "trust_level": 0
             }
         },
         {
@@ -348,11 +372,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "amused",
+            "primary_emotion": "curious",
             "shyness_level": 2,
             "comfort_level": 9,
             "distraction_level": 2,
-            "energy_level": 6
+            "energy_level": 7,
+            "patience_level": 7,
+            "curiosity_level": 8,
+            "affection_level": 8,
+            "trust_level": 8
         },
         {
             "role": "answer",
@@ -373,7 +401,11 @@
                 "shyness_level": 0,
                 "comfort_level": 0,
                 "distraction_level": 0,
-                "energy_level": 0
+                "energy_level": 0,
+                "patience_level": 0,
+                "curiosity_level": 1,
+                "affection_level": 1,
+                "trust_level": 0
             }
         }
     ],
@@ -460,11 +492,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "touched",
-            "shyness_level": 5,
-            "comfort_level": 9,
-            "distraction_level": 1,
-            "energy_level": 6
+            "primary_emotion": "calm",
+            "shyness_level": 6,
+            "comfort_level": 8,
+            "distraction_level": 2,
+            "energy_level": 5,
+            "patience_level": 8,
+            "curiosity_level": 5,
+            "affection_level": 8,
+            "trust_level": 8
         },
         {
             "role": "answer",
@@ -489,7 +525,11 @@
                 "shyness_level": -1,
                 "comfort_level": 1,
                 "distraction_level": -1,
-                "energy_level": 1
+                "energy_level": 1,
+                "patience_level": 0,
+                "curiosity_level": 1,
+                "affection_level": 2,
+                "trust_level": 1
             }
         }
     ],
@@ -575,6 +615,18 @@
             "text": "Do you remember my sister's name?"
         },
         {
+            "role": "mood",
+            "primary_emotion": "calm",
+            "shyness_level": 2,
+            "comfort_level": 8,
+            "distraction_level": 2,
+            "energy_level": 6,
+            "patience_level": 8,
+            "curiosity_level": 6,
+            "affection_level": 7,
+            "trust_level": 6
+        },
+        {
             "role": "tool_call",
             "name": "recall_person",
             "arguments": {
@@ -593,14 +645,6 @@
                     "lives in another city"
                 ]
             }
-        },
-        {
-            "role": "mood",
-            "primary_emotion": "happy",
-            "shyness_level": 2,
-            "comfort_level": 9,
-            "distraction_level": 2,
-            "energy_level": 7
         },
         {
             "role": "answer",
@@ -625,7 +669,11 @@
                 "shyness_level": 0,
                 "comfort_level": 1,
                 "distraction_level": 0,
-                "energy_level": 1
+                "energy_level": 1,
+                "patience_level": 0,
+                "curiosity_level": 1,
+                "affection_level": 1,
+                "trust_level": 1
             }
         }
     ],
@@ -712,11 +760,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "delighted",
+            "primary_emotion": "calm",
             "shyness_level": 2,
-            "comfort_level": 9,
+            "comfort_level": 8,
             "distraction_level": 3,
-            "energy_level": 8
+            "energy_level": 6,
+            "patience_level": 8,
+            "curiosity_level": 7,
+            "affection_level": 7,
+            "trust_level": 6
         },
         {
             "role": "answer",
@@ -741,7 +793,11 @@
                 "shyness_level": 0,
                 "comfort_level": 1,
                 "distraction_level": 0,
-                "energy_level": 2
+                "energy_level": 2,
+                "patience_level": 0,
+                "curiosity_level": 1,
+                "affection_level": 1,
+                "trust_level": 1
             }
         }
     ],
@@ -828,11 +884,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "flustered",
-            "shyness_level": 7,
-            "comfort_level": 7,
-            "distraction_level": 1,
-            "energy_level": 6
+            "primary_emotion": "calm",
+            "shyness_level": 6,
+            "comfort_level": 6,
+            "distraction_level": 2,
+            "energy_level": 6,
+            "patience_level": 5,
+            "curiosity_level": 6,
+            "affection_level": 6,
+            "trust_level": 6
         },
         {
             "role": "answer",
@@ -853,7 +913,11 @@
                 "shyness_level": 1,
                 "comfort_level": 1,
                 "distraction_level": -1,
-                "energy_level": 0
+                "energy_level": 0,
+                "patience_level": 0,
+                "curiosity_level": 1,
+                "affection_level": 2,
+                "trust_level": 1
             }
         },
         {
@@ -861,10 +925,14 @@
             "mood": {
                 "role": "mood",
                 "primary_emotion": "smug",
-                "shyness_level": 1,
+                "shyness_level": 2,
                 "comfort_level": 10,
                 "distraction_level": 2,
-                "energy_level": 8
+                "energy_level": 7,
+                "patience_level": 7,
+                "curiosity_level": 6,
+                "affection_level": 6,
+                "trust_level": 7
             },
             "answer": {
                 "role": "answer",
@@ -885,7 +953,11 @@
                     "shyness_level": -1,
                     "comfort_level": 0,
                     "distraction_level": 0,
-                    "energy_level": 1
+                    "energy_level": 1,
+                    "patience_level": 0,
+                    "curiosity_level": 0,
+                    "affection_level": 1,
+                    "trust_level": 0
                 }
             }
         },
@@ -895,9 +967,13 @@
                 "role": "mood",
                 "primary_emotion": "touched",
                 "shyness_level": 3,
-                "comfort_level": 10,
-                "distraction_level": 1,
-                "energy_level": 4
+                "comfort_level": 8,
+                "distraction_level": 2,
+                "energy_level": 5,
+                "patience_level": 7,
+                "curiosity_level": 6,
+                "affection_level": 8,
+                "trust_level": 7
             },
             "answer": {
                 "role": "answer",
@@ -918,7 +994,11 @@
                     "shyness_level": 0,
                     "comfort_level": 2,
                     "distraction_level": -1,
-                    "energy_level": -1
+                    "energy_level": -1,
+                    "patience_level": 1,
+                    "curiosity_level": 0,
+                    "affection_level": 2,
+                    "trust_level": 2
                 }
             }
         }
@@ -1006,11 +1086,15 @@
         },
         {
             "role": "mood",
-            "primary_emotion": "excited",
+            "primary_emotion": "calm",
             "shyness_level": 1,
-            "comfort_level": 10,
-            "distraction_level": 1,
-            "energy_level": 10
+            "comfort_level": 9,
+            "distraction_level": 2,
+            "energy_level": 8,
+            "patience_level": 6,
+            "curiosity_level": 8,
+            "affection_level": 7,
+            "trust_level": 6
         },
         {
             "role": "answer",
@@ -1035,7 +1119,11 @@
                 "shyness_level": 0,
                 "comfort_level": 1,
                 "distraction_level": -1,
-                "energy_level": 2
+                "energy_level": 2,
+                "patience_level": 0,
+                "curiosity_level": 1,
+                "affection_level": 1,
+                "trust_level": 1
             }
         }
     ]

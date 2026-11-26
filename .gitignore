@@ -2,3 +2,5 @@
 .datasets/
 qwen-adapter/
 .conversations/
+chats/
+__pycache__/

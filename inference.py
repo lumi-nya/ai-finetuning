@@ -10,7 +10,7 @@ from transformers import (
 
 from peft import PeftModel
 
-from prompting import render_prompt
+from prompting import DEFAULT_MOOD, render_prompt
 
 
 class LisaInference:
@@ -38,11 +38,12 @@ class LisaInference:
 
         print("Model loaded")
 
-    def generate(self, context: list[dict], max_new_tokens: int = 256) -> str:
+    def generate(self, context: list[dict], mood: dict | None = None, max_new_tokens: int = 256) -> str:
 
-        # Igual ao prompt dos exemplos de treino (ver prompting.py): sem mood/branch,
-        # sem tool_call/tool_result de turnos passados, terminando em "\n".
-        prompt = render_prompt(context)
+        # Igual ao prompt dos exemplos de treino (ver prompting.py): o mood atual
+        # é a última linha; sem branch e sem tool_call/tool_result de turnos
+        # passados; termina em "\n".
+        prompt = render_prompt(context, mood=mood)
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
@@ -63,22 +64,25 @@ class LisaInference:
         return self.tokenizer.decode(generated, skip_special_tokens=True)
 
 
-    def respond(self, context: list[dict], tool_handler, max_new_tokens: int = 256, max_steps: int = 4) -> list[dict]:
+    def respond(self, context: list[dict], mood: dict, tool_handler, max_new_tokens: int = 256, max_steps: int = 4) -> list[dict]:
         """
         Gera a resposta de um turno, executando tools no caminho.
 
-        `tool_handler(tool_call: dict) -> object` recebe a mensagem tool_call do
-        modelo (`name`, `arguments`) e devolve o conteúdo do tool_result (qualquer
-        valor JSON, por exemplo {"found": false}). Retorna as mensagens geradas,
-        na ordem: tool_calls (se houve), mood e answer. As tool_result também
-        entram na lista, para você poder guardar o turno completo.
+        `context` termina na mensagem 'user' do turno; `mood` é o estado atual
+        (entrada do modelo, vai no fim do prompt). `tool_handler(tool_call)`
+        recebe a mensagem tool_call (`name`, `arguments`) e devolve o conteúdo do
+        tool_result (qualquer valor JSON, por exemplo {"found": false}).
+
+        Retorna as mensagens do turno, na ordem: tool_call e tool_result (se
+        houve) e o answer. Quem aplica o `mood_delta` do answer ao mood é o
+        programa (prompting.apply_mood_delta, ou session.Session).
         """
         context = list(context)
         produced = []
         decoder = json.JSONDecoder()
 
         for _ in range(max_steps):
-            text = self.generate(context, max_new_tokens)
+            text = self.generate(context, mood, max_new_tokens)
             messages, pos = [], 0
             while True:
                 start = text.find("{", pos)
@@ -93,9 +97,9 @@ class LisaInference:
                 messages.append(obj)
 
             calls = [m for m in messages if m.get("role") == "tool_call"]
-            final = [m for m in messages if m.get("role") in ("mood", "answer")]
-            if not calls or final:
-                return produced + final
+            answers = [m for m in messages if m.get("role") == "answer"]
+            if answers or not calls:
+                return produced + answers[:1]
 
             for call in calls:
                 result = {"role": "tool_result", "name": call.get("name"), "content": tool_handler(call)}
@@ -131,7 +135,7 @@ def main():
         },
     ]
 
-    response = lisa.generate(context)
+    response = lisa.generate(context, mood=DEFAULT_MOOD)
     print(response)
 
 

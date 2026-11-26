@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from conversation_format import conversation_to_lines, read_conversation_file
-from prompting import GENERATED_ROLES, render_prompt
+from prompting import GENERATED_ROLES, mood_delta_problems, mood_problems, render_prompt
 
 ROOT = Path(__file__).resolve().parent
 
@@ -22,21 +22,22 @@ def to_lines(messages: list[dict]) -> list[str]:
 def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]:
     """
     Um exemplo de treino por PASSO GERADO pelo modelo, no formato
-    prompt/completion. Um turno simples tem um passo (mood + answer); um turno
-    com tool calling tem dois ou mais:
+    prompt/completion. O MOOD é entrada: cada turno tem um 'mood' (o estado
+    quando o usuário falou) e ele vai no FIM do prompt de todos os passos do
+    turno. O modelo só gera tool_call e answer (que termina em mood_delta):
 
-      user -> [tool_call+] -> tool_result+ -> [tool_call+ -> tool_result+] -> mood + answer
+      user + mood -> [tool_call+] -> tool_result+ -> [tool_call+ -> tool_result+] -> answer
 
-    Cada sequência seguida de mensagens do modelo (tool_call, mood, answer)
-    vira uma completion; as mensagens externas (user, tool_result) só entram
-    no prompt do passo seguinte. O prompt é montado por prompting.render_prompt,
-    igual na inferência: sem mood/branch, e sem tool_call/tool_result dos
-    turnos passados.
+    Cada sequência seguida de mensagens do modelo (tool_call, answer) vira uma
+    completion; as externas (user, tool_result) só entram no prompt do passo
+    seguinte. O prompt é montado por prompting.render_prompt, igual na
+    inferência: um só mood (o atual, no fim), sem branch, e sem
+    tool_call/tool_result dos turnos passados.
 
     Um turno pode ter respostas alternativas (mensagens 'branch' com 'mood' e
-    'answer'): cada uma vira um exemplo extra com o prompt do passo final, e o
-    modelo aprende que aquele turno admite vários humores. Os ramos não entram
-    no contexto dos turnos seguintes.
+    'answer'): é a MESMA fala do usuário com OUTRO mood de entrada. Cada uma
+    vira um exemplo extra (prompt com o mood do ramo, completion = answer do
+    ramo). Os ramos não entram no contexto dos turnos seguintes.
 
     O treino calcula a perda só na completion.
     """
@@ -57,22 +58,31 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
     for turn, start in enumerate(user_positions, start=1):
         is_last = turn == len(user_positions)
         end = len(conversation) if is_last else user_positions[turn]
-        positions = [
-            i for i in range(start + 1, end) if conversation[i]["role"] != "branch"
-        ]
+        segment = [i for i in range(start + 1, end) if conversation[i]["role"] != "branch"]
         branches = [
             conversation[i] for i in range(start + 1, end) if conversation[i]["role"] == "branch"
         ]
 
-        if not positions and not branches:
+        if not segment and not branches:
             print(f"[WARN] {label}, turn {turn} ignored: nothing after the user message.")
             continue
+
+        turn_mood = next((conversation[i] for i in segment if conversation[i]["role"] == "mood"), None)
+        if turn_mood is None:
+            print(f"[WARN] {label}, turn {turn} ignored: no 'mood' (the mood is an input and the prompt needs it).")
+            continue
+
+        problems = mood_problems(turn_mood)
+        if problems:
+            print(f"[WARN] {label}, turn {turn}: mood: {'; '.join(problems)}.")
+
+        positions = [i for i in segment if conversation[i]["role"] != "mood"]
 
         def prefix(upto):
             return [conversation[i] for i in range(upto) if conversation[i]["role"] != "branch"]
 
-        final_prompt = None
         pending_calls = 0
+        final_done = False
         k = 0
         while k < len(positions):
             role = conversation[positions[k]]["role"]
@@ -82,9 +92,12 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
                     k += 1
                     run.append(positions[k])
                 messages = [conversation[i] for i in run]
-                prompt = render_prompt(prefix(run[0]))
-                if final_prompt is None and any(m["role"] in ("mood", "answer") for m in messages):
-                    final_prompt = prompt
+                context = prefix(run[0])
+                examples.append({
+                    "prompt": render_prompt(context, mood=turn_mood),
+                    "completion": "\n".join(to_lines(messages)),
+                })
+                has_answer = False
                 for m in messages:
                     if m["role"] == "tool_call":
                         pending_calls += 1
@@ -92,12 +105,27 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
                             print(f"[WARN] {label}, turn {turn}: tool_call '{m.get('name')}' is not listed in system.tools.")
                         elif not tool_names:
                             print(f"[WARN] {label}, turn {turn}: tool_call but the system message has no 'tools'.")
-                    elif m["role"] == "answer" and not isinstance(m.get("mood_delta"), dict):
-                        print(f"[WARN] {label}, turn {turn}: answer without 'mood_delta' "
-                              f"(the model would learn inconsistent labels).")
-                if pending_calls and any(m["role"] in ("mood", "answer") for m in messages):
-                    print(f"[WARN] {label}, turn {turn}: mood/answer generated before the tool_result.")
-                examples.append({"prompt": prompt, "completion": "\n".join(to_lines(messages))})
+                    elif m["role"] == "answer":
+                        has_answer = True
+                        for problem in mood_delta_problems(m.get("mood_delta")):
+                            print(f"[WARN] {label}, turn {turn}: answer.mood_delta: {problem}.")
+                if pending_calls and has_answer:
+                    print(f"[WARN] {label}, turn {turn}: answer generated before the tool_result.")
+                if has_answer and not final_done:
+                    final_done = True
+                    for number, branch in enumerate(branches, start=2):
+                        b_mood, b_answer = branch.get("mood"), branch.get("answer")
+                        if not isinstance(b_mood, dict) or not isinstance(b_answer, dict):
+                            print(f"[WARN] {label}, turn {turn}, branch {number} ignored: needs 'mood' and 'answer' objects.")
+                            continue
+                        for problem in mood_problems(b_mood):
+                            print(f"[WARN] {label}, turn {turn}, branch {number}: mood: {problem}.")
+                        for problem in mood_delta_problems(b_answer.get("mood_delta")):
+                            print(f"[WARN] {label}, turn {turn}, branch {number}: answer.mood_delta: {problem}.")
+                        examples.append({
+                            "prompt": render_prompt(context, mood=b_mood),
+                            "completion": "\n".join(to_lines([b_answer])),
+                        })
             else:
                 if role == "tool_result":
                     if pending_calls == 0:
@@ -108,17 +136,8 @@ def conversation_to_examples(conversation: list[dict], label: str) -> list[dict]
         if pending_calls:
             print(f"[WARN] {label}, turn {turn}: tool_call without a tool_result.")
 
-        if final_prompt is None:
-            final_prompt = render_prompt(prefix(end if not positions else positions[-1] + 1))
-
-        for number, branch in enumerate(branches, start=2):
-            mood, answer = branch.get("mood"), branch.get("answer")
-            if not isinstance(mood, dict) or not isinstance(answer, dict):
-                print(f"[WARN] {label}, turn {turn}, branch {number} ignored: needs 'mood' and 'answer' objects.")
-                continue
-            if not isinstance(answer.get("mood_delta"), dict):
-                print(f"[WARN] {label}, turn {turn}, branch {number}: answer without 'mood_delta'.")
-            examples.append({"prompt": final_prompt, "completion": "\n".join(to_lines([mood, answer]))})
+        if branches and not final_done:
+            print(f"[WARN] {label}, turn {turn}: branches ignored because the turn has no main answer.")
 
     return examples
 
@@ -238,7 +257,7 @@ def main():
         default="pairs",
         help="pairs: one .jsonl per dataset with {prompt, completion} lines (default). "
              "conversations: one .jsonl per conversation, one message per line, with "
-             "<|response|>/<|alt|>/<|end|> markers (see conversation_format.py)."
+             "<|response|>/<|end|>/<|branch|> markers (see conversation_format.py)."
     )
 
     parser.add_argument(
