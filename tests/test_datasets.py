@@ -3,7 +3,7 @@ import unittest
 
 from tests.helpers import ROOT, quiet
 from convert_dataset import conversation_to_examples
-from prompting import MOOD_KEYS, apply_mood_delta, mood_delta_problems, mood_problems
+from prompting import EMOTIONS, MOOD_KEYS, apply_mood_delta, mood_delta_problems, mood_problems
 
 FILES = sorted((ROOT / "datasets").glob("*.json"))
 
@@ -81,6 +81,39 @@ class Datasets(unittest.TestCase):
         self.assertGreaterEqual(branches, 8)
         for key in ("patience_level", "curiosity_level", "affection_level", "trust_level"):
             self.assertIn(key, varied)
+
+    def test_every_system_has_the_character_sheet_right_after_role(self):
+        text = (ROOT / "character" / "lisa.txt").read_text(encoding="utf-8").strip()
+        for name, n, conv in self.data():
+            system = conv[0]
+            self.assertEqual(system["role"], "system")
+            self.assertEqual(list(system)[:2], ["role", "character"], f"{name}#{n}")
+            self.assertEqual(system["character"], text, f"{name}#{n}: rode python apply_character.py")
+
+    def test_emotions_come_from_the_closed_vocabulary(self):
+        used = set()
+        for name, n, conv in self.data():
+            for mood, ans, brs in turns(conv):
+                used |= {mood["primary_emotion"], ans["mood_delta"]["primary_emotion"]}
+                for b in brs:
+                    used |= {b["mood"]["primary_emotion"], b["answer"]["mood_delta"]["primary_emotion"]}
+        self.assertLessEqual(used, set(EMOTIONS))
+        for emotion in ("annoyed", "irritated", "angry", "furious", "hurt"):
+            self.assertIn(emotion, used)
+
+    def test_anger_dataset_escalates_and_cools_down(self):
+        data = json.loads((ROOT / "datasets" / "raiva.json").read_text(encoding="utf-8"))
+        flows = [[ans["mood_delta"]["primary_emotion"] for _, ans, _ in turns(conv)] for conv in data]
+        self.assertIn(["annoyed", "irritated", "angry", "angry"], flows)
+        self.assertTrue(any("furious" in f for f in flows))
+        self.assertIn(["guarded", "hurt", "calm"], flows)
+
+    def test_no_invention_dataset_covers_unknown_facts(self):
+        data = json.loads((ROOT / "datasets" / "nao-inventa.json").read_text(encoding="utf-8"))
+        misses = [c for c in data if any(m["role"] == "tool_result" and m["content"].get("found") is False for m in c)]
+        hits = [c for c in data if any(m["role"] == "tool_result" and m["content"].get("found") is True for m in c)]
+        self.assertGreaterEqual(len(misses), 3)
+        self.assertGreaterEqual(len(hits), 3)
 
 
 if __name__ == "__main__":

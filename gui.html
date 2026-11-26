@@ -395,8 +395,10 @@ function moodDiff(a, b) {
 
 // A ordem das chaves é a que o modelo viu no treino; nunca reordene.
 const mk = {
-  system: (catalog, tools) => {
-    const o = { role: 'system', animation_catalog: clone(catalog) };
+  system: (catalog, tools, character) => {
+    const o = { role: 'system' };
+    if (typeof character === 'string') o.character = character;
+    o.animation_catalog = clone(catalog);
     if (Array.isArray(tools)) o.tools = clone(tools);
     return o;
   },
@@ -438,6 +440,7 @@ const firstUser = conv => (conv.find(m => m && m.role === 'user' && typeof m.tex
 const searchText = conv => conv.map(m => [m.text, m.summary, ...(Array.isArray(m.timeline) ? m.timeline.map(e => e && e.text) : []), ...(m.answer && Array.isArray(m.answer.timeline) ? m.answer.timeline.map(e => e && e.text) : [])].filter(Boolean).join(' ')).join(' ').toLowerCase();
 
 /* ---------------------------------------------------------- validação */
+const emotionSet = () => new Set(S.defaults.emotions || []);
 function validateConv(conv) {
   const out = [];
   const add = (level, text, mi) => out.push({ level, text, mi });
@@ -453,6 +456,7 @@ function validateConv(conv) {
   let turn = 0, hasMood = false, hasAnswer = true, lastUserIdx = -1, branchCount = 0, mainMood = null, prevIn = null, prevAns = null, curIn = null, curAns = null;
   const checkMood = (m, i, tag) => {
     if (typeof m.primary_emotion !== 'string' || !m.primary_emotion.trim()) add('warn', `${tag}: primary_emotion vazio.`, i);
+    else if (emotionSet().size && !emotionSet().has(m.primary_emotion)) add('warn', `${tag}: a emoção "${m.primary_emotion}" não está no vocabulário.`, i);
     for (const [k] of LEVELS) {
       if (!Number.isInteger(m[k]) || m[k] < 0 || m[k] > 10) add('warn', `${tag}: ${k} deveria ser um inteiro de 0 a 10.`, i);
     }
@@ -464,6 +468,7 @@ function validateConv(conv) {
     else if (!d || typeof d !== 'object' || Array.isArray(d)) add('warn', `${tag}: mood_delta precisa ser um objeto.`, i);
     else {
       if (typeof d.primary_emotion !== 'string' || !d.primary_emotion.trim()) add('warn', `${tag}: mood_delta sem primary_emotion.`, i);
+      else if (emotionSet().size && !emotionSet().has(d.primary_emotion)) add('warn', `${tag}: mood_delta com emoção "${d.primary_emotion}" fora do vocabulário.`, i);
       for (const [k] of LEVELS) if (!Number.isInteger(d[k]) || d[k] < -10 || d[k] > 10) add('warn', `${tag}: mood_delta.${k} deveria ser um inteiro de -10 a 10.`, i);
     }
     if (!Array.isArray(m.timeline) || !m.timeline.length) { add('warn', `${tag}: timeline vazia.`, i); return; }
@@ -493,6 +498,8 @@ function validateConv(conv) {
           else seen.add(a.id);
         });
         if (!Array.isArray(m.animation_catalog) || !m.animation_catalog.length) add('warn', 'Catálogo de animações vazio.', i);
+        if (typeof m.character !== 'string' || !m.character.trim()) add('warn', "Falta o campo 'character' (ficha resumida da personagem) no system.", i);
+        else if (Object.keys(m)[1] !== 'character') add('warn', "'character' deveria vir logo depois de 'role' no system (ordem do treino).", i);
         if (m.tools !== undefined) {
           if (!Array.isArray(m.tools)) add('warn', "'tools' precisa ser uma lista.", i);
           else {
@@ -755,7 +762,8 @@ function newConversation() {
   if (!c) { toast('Abra ou crie um arquivo primeiro.', 'err'); return; }
   const catalog = c.data.length ? catalogOf(c.data[c.data.length - 1]) : S.defaults.catalog;
   const lastTools = c.data.length ? toolsOf(c.data[c.data.length - 1]) : [];
-  c.data.push([mk.system(catalog, lastTools.length ? lastTools : S.defaults.tools), ...newTurn()]);
+  const lastSys = c.data.length ? c.data[c.data.length - 1].find(m => m.role === 'system') : null;
+  c.data.push([mk.system(catalog, lastTools.length ? lastTools : S.defaults.tools, typeof (lastSys && lastSys.character) === 'string' ? lastSys.character : S.defaults.character), ...newTurn()]);
   S.sel = c.data.length - 1; S.filter = ''; $('#filter').value = '';
   touch(); refreshDerived(); renderEditor();
   requestAnimationFrame(() => { const t = $('#msgs .msg-user textarea'); if (t) t.focus(); });
@@ -1024,7 +1032,29 @@ function addBar(conv) {
 
 /* sistema: catálogo */
 function systemEditor(conv, m) {
-  return h('div', null, catalogFold(conv, m), toolsFold(conv, m));
+  return h('div', null, characterFold(conv, m), catalogFold(conv, m), toolsFold(conv, m));
+}
+function characterFold(conv, m) {
+  const key = 'char:' + S.sel;
+  const has = typeof m.character === 'string';
+  const ta = h('textarea', { 'aria-label': 'Ficha resumida da personagem', rows: 8, value: has ? m.character : '',
+    oninput: e => { m.character = e.target.value; touch(); refreshDerived(); } });
+  const d = h('details', { class: 'fold', ontoggle: () => { d.open ? S.ui.open.add(key) : S.ui.open.delete(key); } },
+    h('summary', null, has ? `Ficha da personagem (${m.character.length} caracteres)` : 'Ficha da personagem (ausente)'),
+    h('p', { class: 'muted small' }, 'Resumo que vai no prompt (character/lisa.txt). O modelo só deve afirmar o que está aqui, na memória ou na conversa.'),
+    ta,
+    h('div', { class: 'row' },
+      btn('Usar a ficha padrão', () => { m.character = S.defaults.character || ''; touch(); refreshDerived(); renderEditor(); }),
+      btn('Aplicar a todas as conversas', async () => {
+        const others = S.cur.data.length - 1;
+        if (!others) { toast('Só há uma conversa neste arquivo.'); return; }
+        if (!await askConfirm(`Substituir a ficha das outras ${others} conversas de ${S.cur.name}.json por esta?`, { ok: 'Substituir', danger: true })) return;
+        S.cur.data.forEach(cv => { if (cv === conv) return; const sys = cv.find(x => x.role === 'system'); if (sys) { const rest = Object.entries(sys).filter(([k]) => k !== 'role' && k !== 'character'); for (const k of Object.keys(sys)) delete sys[k]; sys.role = 'system'; sys.character = m.character || ''; for (const [k, v] of rest) sys[k] = v; } });
+        touch(); refreshDerived(); renderEditor(); toast('Ficha aplicada.');
+      })));
+  d.open = S.ui.open.has(key);
+  autoGrow(ta);
+  return d;
 }
 function catalogFold(conv, m) {
   const n = Array.isArray(m.animation_catalog) ? m.animation_catalog.length : 0;
@@ -1432,7 +1462,7 @@ async function loadChat() {
   try {
     const r = await api('GET', '/api/chats/' + encodeURIComponent(name));
     const c = S.chat;
-    c.catalog = r.context.find(m => m.role === 'system') || mk.system(S.defaults.catalog, S.defaults.tools);
+    c.catalog = r.context.find(m => m.role === 'system') || mk.system(S.defaults.catalog, S.defaults.tools, S.defaults.character);
     const mem = r.context.find(m => m.role === 'memory');
     c.memory = mem || mk.memory(); c.memoryOn = !!mem;
     c.turns = [];
@@ -1452,7 +1482,7 @@ async function loadChat() {
 function ensureChatContext() {
   const c = S.chat;
   if (!c.mood) c.mood = defaultMood();
-  if (!c.catalog) c.catalog = mk.system(S.defaults.catalog, S.defaults.tools);
+  if (!c.catalog) c.catalog = mk.system(S.defaults.catalog, S.defaults.tools, S.defaults.character);
   if (!c.memory) c.memory = mk.memory();
   if (!$('#chat-cat').firstChild) {
     $('#chat-cat').replaceChildren(h('details', { class: 'fold' },
@@ -1463,11 +1493,14 @@ function ensureChatContext() {
         const cat = conv ? catalogOf(conv) : [];
         if (!cat.length) { toast('Nenhum catálogo no dataset aberto.', 'err'); return; }
         const tl = toolsOf(conv);
-        c.catalog = mk.system(cat, tl.length ? tl : undefined);
+        c.catalog = mk.system(cat, tl.length ? tl : undefined, typeof (conv.find(m => m.role === 'system') || {}).character === 'string' ? conv.find(m => m.role === 'system').character : S.defaults.character);
         $('#chat-cat').replaceChildren(); ensureChatContext();
         toast('Catálogo e tools copiados.');
       })),
-      h('details', { class: 'fold' }, h('summary', null, 'Tools disponíveis'), toolsEditor(c.catalog, { onChange: () => {}, applyAll: null })));
+      h('details', { class: 'fold' }, h('summary', null, 'Tools disponíveis'), toolsEditor(c.catalog, { onChange: () => {}, applyAll: null })),
+      h('details', { class: 'fold' }, h('summary', null, 'Ficha da personagem'),
+        h('textarea', { 'aria-label': 'Ficha resumida da personagem', rows: 8, value: typeof c.catalog.character === 'string' ? c.catalog.character : '',
+          oninput: e => { const rest = Object.entries(c.catalog).filter(([k]) => k !== 'role' && k !== 'character'); for (const k of Object.keys(c.catalog)) delete c.catalog[k]; c.catalog.role = 'system'; c.catalog.character = e.target.value; for (const [k, v] of rest) c.catalog[k] = v; } })));
   }
   if (!$('#mem-box').firstChild) $('#mem-box').replaceChildren(memoryEditorChat(c.memory));
 }

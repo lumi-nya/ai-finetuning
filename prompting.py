@@ -33,18 +33,36 @@ MOOD_LEVELS = [
 MOOD_KEYS = [key for key, _ in MOOD_LEVELS]
 MOOD_MIN, MOOD_MAX = 0, 10
 
-# Estado de partida de uma conversa nova (o "temperamento" base do personagem).
+# Vocabulário fechado de emoções (primary_emotion do mood e do mood_delta).
+# Cobre o espectro realista, inclusive as negativas: a personagem pode ficar
+# irritada, com raiva e até furiosa. Agrupadas por família, da mais leve à mais forte.
+EMOTIONS = [
+    # neutras / calmas
+    "calm", "content", "bored", "tired", "distracted", "confused",
+    # positivas
+    "happy", "excited", "amused", "curious", "proud", "grateful", "tender", "touched",
+    # timidez / vergonha / medo
+    "shy", "embarrassed", "flustered", "nervous", "worried", "guarded",
+    # tristeza
+    "sad", "lonely", "disappointed", "hurt",
+    # raiva (escala: annoyed < irritated < angry < furious) e aversão
+    "uncomfortable", "annoyed", "irritated", "offended", "angry", "furious",
+]
+
+# Estado de partida de uma conversa nova: o temperamento base da Lisa
+# (character/lisa.md, seção 5): tímida, distraída e muito paciente; ainda não
+# confia nem tem afeto por quem acabou de conhecer.
 DEFAULT_MOOD = {
     "role": "mood",
     "primary_emotion": "calm",
-    "shyness_level": 3,
-    "comfort_level": 7,
-    "distraction_level": 3,
-    "energy_level": 5,
-    "patience_level": 6,
-    "curiosity_level": 6,
-    "affection_level": 5,
-    "trust_level": 5,
+    "shyness_level": 7,
+    "comfort_level": 3,
+    "distraction_level": 9,
+    "energy_level": 3,
+    "patience_level": 10,
+    "curiosity_level": 5,
+    "affection_level": 3,
+    "trust_level": 3,
 }
 
 # Mensagens que o MODELO gera (entram na completion do treino).
@@ -67,6 +85,8 @@ def mood_delta_problems(delta):
     emotion = delta.get("primary_emotion")
     if not isinstance(emotion, str) or not emotion.strip():
         problems.append("primary_emotion is empty")
+    elif emotion not in EMOTIONS:
+        problems.append(f"primary_emotion {emotion!r} is not in EMOTIONS")
     for key in MOOD_KEYS:
         value = delta.get(key)
         if not _is_int(value) or not -MOOD_MAX <= value <= MOOD_MAX:
@@ -82,6 +102,8 @@ def mood_problems(mood):
     emotion = mood.get("primary_emotion")
     if not isinstance(emotion, str) or not emotion.strip():
         problems.append("primary_emotion is empty")
+    elif emotion not in EMOTIONS:
+        problems.append(f"primary_emotion {emotion!r} is not in EMOTIONS")
     for key in MOOD_KEYS:
         value = mood.get(key)
         if not _is_int(value) or not MOOD_MIN <= value <= MOOD_MAX:

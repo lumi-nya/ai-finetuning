@@ -3,7 +3,7 @@ import unittest
 
 from tests.helpers import SYSTEM, answer, mood
 from prompting import (
-    DEFAULT_MOOD, MOOD_KEYS, apply_mood_delta, mood_delta_problems, mood_problems,
+    DEFAULT_MOOD, EMOTIONS, MOOD_KEYS, apply_mood_delta, mood_delta_problems, mood_problems,
     normalize_mood, render_prompt,
 )
 
@@ -26,6 +26,20 @@ class MoodVariables(unittest.TestCase):
         self.assertEqual(mood_delta_problems(answer()["mood_delta"]), [])
         self.assertTrue(mood_delta_problems({**answer()["mood_delta"], "trust_level": 11}))
         self.assertTrue(mood_delta_problems(None))
+
+    def test_emotion_vocabulary_is_closed_and_has_the_anger_scale(self):
+        for emotion in ("annoyed", "irritated", "angry", "furious", "hurt", "calm"):
+            self.assertIn(emotion, EMOTIONS)
+        self.assertEqual(len(EMOTIONS), len(set(EMOTIONS)))
+        self.assertTrue(mood_problems(mood("hesitant_forgiving")))
+        self.assertTrue(mood_delta_problems({**answer()["mood_delta"], "primary_emotion": "smug"}))
+        self.assertIn(DEFAULT_MOOD["primary_emotion"], EMOTIONS)
+
+    def test_default_mood_is_lisa_temperament(self):
+        self.assertEqual(
+            [DEFAULT_MOOD[k] for k in MOOD_KEYS],
+            [7, 3, 9, 3, 10, 5, 3, 3],  # timidez, conforto, distração, energia, paciência, curiosidade, afeto, confiança
+        )
 
     def test_normalize_orders_keys_and_fills_defaults(self):
         out = normalize_mood({"trust_level": 9, "primary_emotion": "shy", "role": "mood"})

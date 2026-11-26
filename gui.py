@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from prompting import (
-    DEFAULT_MOOD, MOOD_KEYS, MOOD_LEVELS, MOOD_MAX, MOOD_MIN,
+    DEFAULT_MOOD, EMOTIONS, MOOD_KEYS, MOOD_LEVELS, MOOD_MAX, MOOD_MIN,
     apply_mood_delta, mood_problems, normalize_mood, render_prompt,
 )
 from session import Session
@@ -40,6 +40,7 @@ ROOT = Path(__file__).resolve().parent
 HTML_PATH = ROOT / "gui.html"
 DATASETS_DIR = ROOT / "datasets"
 CHATS_DIR = ROOT / "chats"
+CHARACTER_PATH = ROOT / "character" / "lisa.txt"
 
 DEFAULT_MODEL = "Qwen/Qwen3-1.7B-Base"
 DEFAULT_ADAPTER = "qwen-adapter"
@@ -197,6 +198,14 @@ DEFAULT_TOOLS = [
 ]
 
 
+def read_character():
+    """Resumo da personagem que vai no campo `character` do system (character/lisa.txt)."""
+    try:
+        return CHARACTER_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def compute_defaults():
     """Catálogo, emoções e agent_id mais comuns nos datasets existentes."""
     catalogs, emotions, agents, tool_sets = Counter(), Counter(), Counter(), Counter()
@@ -234,7 +243,8 @@ def compute_defaults():
     return {
         "catalog": catalog,
         "tools": tools,
-        "emotions": sorted(e for e in emotions if e),
+        "emotions": EMOTIONS,
+        "character": read_character(),
         "agent_id": agents.most_common(1)[0][0] if agents else "Lisa",
         "mood_levels": [{"key": k, "label": label} for k, label in MOOD_LEVELS],
         "mood_range": [MOOD_MIN, MOOD_MAX],

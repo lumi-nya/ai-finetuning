@@ -8,6 +8,13 @@ import gui
 from prompting import MOOD_KEYS
 
 
+NEUTRAL = dict(patience=6, trust=6, curiosity=5, affection=5)
+
+
+def neutral(emotion="calm", **levels):
+    return mood(emotion, **{**NEUTRAL, **levels})
+
+
 class ChatApi(unittest.TestCase):
     def setUp(self):
         manager = gui.ModelManager(mock=True, model_name="m", adapter="a")
@@ -23,7 +30,7 @@ class ChatApi(unittest.TestCase):
         return gui.chat_api(body)
 
     def test_output_has_only_answer_and_program_applies_delta(self):
-        r = self.chat(mood("calm", energy=5))
+        r = self.chat(neutral(energy=5))
         self.assertIsNone(r.get("mood"))
         self.assertEqual(r["answer"]["role"], "answer")
         self.assertEqual(list(r["answer"]["mood_delta"])[1:], MOOD_KEYS)
@@ -35,10 +42,10 @@ class ChatApi(unittest.TestCase):
         self.assertEqual(json.loads(r["prompt"].strip().split("\n")[-1])["trust_level"], 1)
 
     def test_variables_change_the_mock_answer(self):
-        impatient = self.chat(mood("irritated", patience=1))
-        distrustful = self.chat(mood("guarded", trust=2))
-        curious = self.chat(mood("curious", curiosity=9))
-        loving = self.chat(mood("tender", affection=9))
+        impatient = self.chat(neutral("irritated", patience=1))
+        distrustful = self.chat(neutral("guarded", trust=2))
+        curious = self.chat(neutral("curious", curiosity=9))
+        loving = self.chat(neutral("tender", affection=9))
         emotions = {r["answer"]["mood_delta"]["primary_emotion"] for r in (impatient, distrustful, curious, loving)}
         self.assertEqual(len(emotions), 4)
         self.assertEqual(impatient["mood_after"]["patience_level"], 0)
