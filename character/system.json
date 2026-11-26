@@ -1,0 +1,75 @@
+{
+    "animation_catalog": [
+        {
+            "id": "idle_shy_scratch_head",
+            "description": "The character shyly scratches the back of their head.",
+            "category": "idle",
+            "layer": "body",
+            "tags": [
+                "shy",
+                "embarrassed",
+                "hesitant"
+            ]
+        },
+        {
+            "id": "idle_silly_bounce",
+            "description": "The character makes small playful bouncing movements.",
+            "category": "idle",
+            "layer": "body",
+            "tags": [
+                "silly",
+                "playful",
+                "energetic"
+            ]
+        },
+        {
+            "id": "gesture_excited_bounce",
+            "description": "The character excitedly bounces in place.",
+            "category": "gesture",
+            "layer": "body",
+            "tags": [
+                "excited",
+                "happy",
+                "surprised"
+            ]
+        },
+        {
+            "id": "gesture_scratch_head",
+            "description": "The character scratches their head while thinking.",
+            "category": "gesture",
+            "layer": "body",
+            "tags": [
+                "confused",
+                "thinking",
+                "uncertain"
+            ]
+        },
+        {
+            "id": "facial_pout",
+            "description": "The character makes a displeased pouting expression.",
+            "category": "facial",
+            "layer": "face",
+            "tags": [
+                "disappointed",
+                "playful",
+                "offended"
+            ]
+        }
+    ],
+    "tools": [
+        {
+            "name": "recall_fact",
+            "description": "Look up a remembered fact that the context may no longer contain.",
+            "parameters": {
+                "query": "string"
+            }
+        },
+        {
+            "name": "recall_person",
+            "description": "Look up what is remembered about a specific person.",
+            "parameters": {
+                "name": "string"
+            }
+        }
+    ]
+}

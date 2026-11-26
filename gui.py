@@ -35,12 +35,12 @@ from prompting import (
     apply_mood_delta, mood_problems, normalize_mood, render_prompt,
 )
 from session import Session
+from shared_system import load_shared_system, save_shared_system, with_shared_system, without_shared_system
 
 ROOT = Path(__file__).resolve().parent
 HTML_PATH = ROOT / "gui.html"
 DATASETS_DIR = ROOT / "datasets"
 CHATS_DIR = ROOT / "chats"
-CHARACTER_PATH = ROOT / "character" / "lisa.txt"
 
 DEFAULT_MODEL = "Qwen/Qwen3-1.7B-Base"
 DEFAULT_ADAPTER = "qwen-adapter"
@@ -131,6 +131,26 @@ def list_datasets():
     return items
 
 
+def system_api_get():
+    shared = shared_system()
+    if shared is None:
+        raise ApiError(404, "Faltam character/lisa.txt e/ou character/system.json.")
+    return shared
+
+
+def system_api_put(body):
+    character = body.get("character")
+    catalog, tools = body.get("animation_catalog"), body.get("tools")
+    if not isinstance(character, str) or not character.strip():
+        raise ApiError(400, "A ficha da personagem (character) não pode ficar vazia.")
+    if not isinstance(catalog, list) or not catalog or not all(isinstance(x, dict) for x in catalog):
+        raise ApiError(400, "animation_catalog precisa ser uma lista não vazia de objetos.")
+    if not isinstance(tools, list) or not all(isinstance(x, dict) for x in tools):
+        raise ApiError(400, "tools precisa ser uma lista de objetos.")
+    save_shared_system({"character": character, "animation_catalog": catalog, "tools": tools})
+    return system_api_get()
+
+
 def load_dataset_api(name):
     path = dataset_path(name)
     if not path.is_file():
@@ -139,6 +159,11 @@ def load_dataset_api(name):
         raw, data = read_dataset(path)
     except (OSError, ValueError) as error:
         raise ApiError(422, f"Não consegui ler datasets/{name}.json: {error}")
+    # A system compartilhada não fica no arquivo: entra aqui para o editor mostrar o
+    # que o modelo vai ver, e sai de novo ao salvar (save_dataset_api).
+    shared = shared_system()
+    if shared is not None and isinstance(data, list):
+        data = [with_shared_system(c, shared) if isinstance(c, list) else c for c in data]
     return {
         "name": name,
         "hash": sha(raw),
@@ -167,6 +192,9 @@ def save_dataset_api(name, body):
         raise ApiError(409, f"{name}.json não existe mais no disco.")
 
     normalize_for_save(data)
+    shared = shared_system()
+    if shared is not None:
+        data = [without_shared_system(c, shared) for c in data]
     try:
         text = json.dumps(data, indent=4, ensure_ascii=False, allow_nan=False)
     except ValueError as error:
@@ -198,53 +226,34 @@ DEFAULT_TOOLS = [
 ]
 
 
-def read_character():
-    """Resumo da personagem que vai no campo `character` do system (character/lisa.txt)."""
+def shared_system():
+    """System compartilhada (character/lisa.txt + character/system.json) ou None se faltar."""
     try:
-        return CHARACTER_PATH.read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
+        return load_shared_system()
+    except (OSError, ValueError):
+        return None
 
 
 def compute_defaults():
-    """Catálogo, emoções e agent_id mais comuns nos datasets existentes."""
-    catalogs, emotions, agents, tool_sets = Counter(), Counter(), Counter(), Counter()
-    catalog_by_key, tools_by_key = {}, {}
+    """Catálogo, tools e ficha (da system compartilhada) e o agent_id mais comum nos datasets."""
+    agents = Counter()
     for path in sorted(DATASETS_DIR.glob("*.json")):
         try:
             _, data = read_dataset(path)
         except (OSError, ValueError):
             continue
-        if not isinstance(data, list):
-            continue
-        for conv in data:
-            if not isinstance(conv, list):
-                continue
-            for msg in conv:
-                if not isinstance(msg, dict):
-                    continue
-                role = msg.get("role")
-                if role == "system" and isinstance(msg.get("animation_catalog"), list):
-                    key = json.dumps(msg["animation_catalog"], ensure_ascii=False)
-                    catalogs[key] += 1
-                    catalog_by_key[key] = msg["animation_catalog"]
-                    if isinstance(msg.get("tools"), list) and msg["tools"]:
-                        tkey = json.dumps(msg["tools"], ensure_ascii=False)
-                        tool_sets[tkey] += 1
-                        tools_by_key[tkey] = msg["tools"]
-                elif role == "mood" and isinstance(msg.get("primary_emotion"), str):
-                    emotions[msg["primary_emotion"]] += 1
-                elif role == "branch" and isinstance(msg.get("mood"), dict) and isinstance(msg["mood"].get("primary_emotion"), str):
-                    emotions[msg["mood"]["primary_emotion"]] += 1
-                elif role == "answer" and isinstance(msg.get("agent_id"), str):
+        for conv in data if isinstance(data, list) else []:
+            for msg in conv if isinstance(conv, list) else []:
+                if isinstance(msg, dict) and msg.get("role") == "answer" and isinstance(msg.get("agent_id"), str):
                     agents[msg["agent_id"]] += 1
-    catalog = catalog_by_key[catalogs.most_common(1)[0][0]] if catalogs else []
-    tools = tools_by_key[tool_sets.most_common(1)[0][0]] if tool_sets else DEFAULT_TOOLS
+    shared = shared_system() or {}
+    catalog = shared.get("animation_catalog", [])
+    tools = shared.get("tools") or DEFAULT_TOOLS
     return {
         "catalog": catalog,
         "tools": tools,
         "emotions": EMOTIONS,
-        "character": read_character(),
+        "character": shared.get("character", ""),
         "agent_id": agents.most_common(1)[0][0] if agents else "Lisa",
         "mood_levels": [{"key": k, "label": label} for k, label in MOOD_LEVELS],
         "mood_range": [MOOD_MIN, MOOD_MAX],
@@ -628,6 +637,11 @@ class Handler(BaseHTTPRequestHandler):
                 return load_dataset_api(name)
             if method == "PUT":
                 return save_dataset_api(name, self._read_json())
+        if path == "/api/system":
+            if method == "GET":
+                return system_api_get()
+            if method == "PUT":
+                return system_api_put(self._read_json())
         if method == "GET" and path == "/api/chats":
             return {"chats": list_chats()}
         if path.startswith("/api/chats/"):

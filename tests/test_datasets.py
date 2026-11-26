@@ -3,8 +3,10 @@ import unittest
 
 from tests.helpers import ROOT, quiet
 from convert_dataset import conversation_to_examples
+from shared_system import load_shared_system, with_shared_system
 from prompting import EMOTIONS, MOOD_KEYS, apply_mood_delta, mood_delta_problems, mood_problems
 
+SHARED = load_shared_system()
 FILES = sorted((ROOT / "datasets").glob("*.json"))
 
 
@@ -37,7 +39,7 @@ class Datasets(unittest.TestCase):
     def test_every_dataset_converts_without_warnings(self):
         for path in FILES:
             for n, conv in enumerate(json.loads(path.read_text(encoding="utf-8")), 1):
-                ex, out = quiet(conversation_to_examples, conv, f"{path.name}#{n}")
+                ex, out = quiet(conversation_to_examples, with_shared_system(conv, SHARED), f"{path.name}#{n}")
                 self.assertNotIn("WARN", out, f"{path.name} conversa {n}: {out}")
                 self.assertTrue(ex)
 
@@ -62,7 +64,7 @@ class Datasets(unittest.TestCase):
 
     def test_mood_is_never_stored_inside_past_prompts(self):
         for name, n, conv in self.data():
-            ex, _ = quiet(conversation_to_examples, conv, "x")
+            ex, _ = quiet(conversation_to_examples, with_shared_system(conv, SHARED), "x")
             for e in ex:
                 self.assertEqual(e["prompt"].count('"role": "mood"'), 1, f"{name}#{n}")
                 self.assertEqual(json.loads(e["prompt"].strip().split("\n")[-1])["role"], "mood")
@@ -82,13 +84,17 @@ class Datasets(unittest.TestCase):
         for key in ("patience_level", "curiosity_level", "affection_level", "trust_level"):
             self.assertIn(key, varied)
 
-    def test_every_system_has_the_character_sheet_right_after_role(self):
-        text = (ROOT / "character" / "lisa.txt").read_text(encoding="utf-8").strip()
+    def test_datasets_do_not_repeat_the_shared_system(self):
         for name, n, conv in self.data():
-            system = conv[0]
-            self.assertEqual(system["role"], "system")
-            self.assertEqual(list(system)[:2], ["role", "character"], f"{name}#{n}")
-            self.assertEqual(system["character"], text, f"{name}#{n}: rode python apply_character.py")
+            self.assertNotEqual(conv[0]["role"], "system", f"{name}#{n}: a system fica em character/, não no dataset")
+
+    def test_shared_system_is_prepended_in_training_examples(self):
+        shared = load_shared_system()
+        self.assertEqual(list(shared), ["role", "character", "animation_catalog", "tools"])
+        for name, n, conv in self.data():
+            ex, _ = quiet(conversation_to_examples, with_shared_system(conv, shared), "x")
+            first = json.loads(ex[0]["prompt"].split("\n", 1)[0])
+            self.assertEqual(first, shared, f"{name}#{n}")
 
     def test_emotions_come_from_the_closed_vocabulary(self):
         used = set()
@@ -102,14 +108,14 @@ class Datasets(unittest.TestCase):
             self.assertIn(emotion, used)
 
     def test_anger_dataset_escalates_and_cools_down(self):
-        data = json.loads((ROOT / "datasets" / "raiva.json").read_text(encoding="utf-8"))
+        data = json.loads((ROOT / "datasets" / "anger.json").read_text(encoding="utf-8"))
         flows = [[ans["mood_delta"]["primary_emotion"] for _, ans, _ in turns(conv)] for conv in data]
         self.assertIn(["annoyed", "irritated", "angry", "angry"], flows)
         self.assertTrue(any("furious" in f for f in flows))
         self.assertIn(["guarded", "hurt", "calm"], flows)
 
     def test_no_invention_dataset_covers_unknown_facts(self):
-        data = json.loads((ROOT / "datasets" / "nao-inventa.json").read_text(encoding="utf-8"))
+        data = json.loads((ROOT / "datasets" / "no-invention.json").read_text(encoding="utf-8"))
         misses = [c for c in data if any(m["role"] == "tool_result" and m["content"].get("found") is False for m in c)]
         hits = [c for c in data if any(m["role"] == "tool_result" and m["content"].get("found") is True for m in c)]
         self.assertGreaterEqual(len(misses), 3)
